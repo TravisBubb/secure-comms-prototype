@@ -55,14 +55,16 @@ void uart_recv(uint8_t *buf, size_t maxlen, TickType_t timeout);
 ### `uart_driver.c`
 
 - Initializes UART0 with standard configuration:
-Parameter | Value
------------------
-Baud rate | 115200
-Data bits | 8
-Parity | None
-Stop bits | 1
-Flow control | None
-Pins | Default (USB bridge)
+
+| Parameter    | Value                |
+| ------------ | -------------------- |
+| Baud rate    | 115200               |
+| Data bits    | 8                    |
+| Parity       | None                 |
+| Stop bits    | 1                    |
+| Flow control | None                 |
+| Pins         | Default (USB bridge) |
+
 - Installs the UART driver with a receive buffer of `2 x BUF_SIZE` to accomodate bursts of incoming data.
 - `uart_send` wraps `uart_write_bytes` for transmitting raw data.
 - `uart_recv` wraps `uart_read_bytes`, allowing non-blocking reads with a FreeRTOS timeout.
