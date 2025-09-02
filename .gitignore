@@ -1,0 +1,4 @@
+**build/
+**.cache/
+**sdkconfig*
+**compile_commands.json
