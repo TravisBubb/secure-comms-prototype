@@ -1,3 +1,6 @@
 [submodule "external/sx126x_driver"]
 	path = external/sx126x_driver
 	url = https://github.com/Lora-net/sx126x_driver.git
+[submodule "lib/secure-comms-crypto"]
+	path = lib/secure-comms-crypto
+	url = git@github.com:TravisBubb/secure-comms-crypto.git
