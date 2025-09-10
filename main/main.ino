@@ -1,11 +1,11 @@
 #include "Arduino.h"
-#include "uart.h"
+#include "uart_proto.h"
 
-uart_parser_t parser;
+uart_proto_t parser;
 
 void setup() {
   Serial.begin(115200);
-  uart_parser_init(&parser);
+  uart_proto_init(&parser);
   Serial.println("UART parser test starting...");
 }
 
@@ -20,7 +20,7 @@ void loop() {
     Serial.print(" STATE: ");
     Serial.println(parser.state);
 
-    uart_rx_rc result = uart_rx_handle(&parser, b);
+    uart_proto_result_t result = uart_proto_feed(&parser, b);
 
     if (result == UART_RX_PACKET_COMPLETE) {
       Serial.print("Packet received. CMD: ");
@@ -34,10 +34,10 @@ void loop() {
           Serial.print(" ");
       }
       Serial.println();
-      uart_parser_init(&parser);
+      uart_proto_init(&parser);
     } else if (result == UART_RX_ERROR) {
       Serial.println("Packet error.");
-      uart_parser_init(&parser);
+      uart_proto_init(&parser);
     }
   }
 }
