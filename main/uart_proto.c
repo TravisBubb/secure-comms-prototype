@@ -40,6 +40,14 @@ uart_proto_result_t uart_proto_feed(uart_proto_t *p, uint8_t b) {
   return UART_RX_ERROR;
 }
 
+packet_t uart_proto_to_packet(const uart_proto_t *p) {
+  packet_t pkt = {.cmd = p->cmd, .len = p->length};
+  for (size_t i = 0; i < p->length; i++) {
+    pkt.payload[i] = p->buffer[i];
+  }
+  return pkt;
+}
+
 uart_proto_result_t handle_wait_for_start(uart_proto_t *p, uint8_t b) {
   if (b == UART_START_BYTE)
     p->state = UART_STATE_READ_CMD;

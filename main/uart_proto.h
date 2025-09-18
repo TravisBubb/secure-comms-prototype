@@ -1,17 +1,12 @@
 #ifndef UART_PROTO_H
 #define UART_PROTO_H
 
-#include "uart_cmd.h"
+#include "packet.h"
 #include <stddef.h>
 #include <stdint.h>
 
 #define UART_MAX_PAYLOAD 256
 #define UART_START_BYTE 0xAA
-
-/**
- * @brief Typedef for the command callback
- */
-typedef void (*uart_proto_callback_t)(const uart_packet_t *pkt);
 
 /**
  * @brief Represents a certain state for the parsing state machine
@@ -39,7 +34,7 @@ typedef enum {
 typedef struct {
   uart_proto_state_t state;
 
-  uart_cmd_t cmd;
+  uint8_t cmd;
   size_t length;
   uint8_t buffer[UART_MAX_PAYLOAD];
   size_t index;
@@ -47,8 +42,6 @@ typedef struct {
   uint16_t crc_recvd; // CRC from the packet
   uint16_t crc_index; // How many CRC bytes received so far
   uint16_t crc_calc;  // Incremental CRC as bytes are read
-
-  uart_proto_callback_t on_pkt_complete; // Callback for complete packets
 } uart_proto_t;
 
 #ifdef __cplusplus
@@ -64,6 +57,11 @@ void uart_proto_init(uart_proto_t *p);
  * @brief Feed a single byte into the parser
  */
 uart_proto_result_t uart_proto_feed(uart_proto_t *p, uint8_t b);
+
+/**
+ * @brief Map a uart_proto_t to a packet_t
+ */
+packet_t uart_proto_to_packet(const uart_proto_t *p);
 
 #ifdef __cplusplus
 }
