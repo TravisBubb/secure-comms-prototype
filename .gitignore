@@ -1,4 +1,3 @@
-**build/
-**.cache/
-**sdkconfig*
-**compile_commands.json
+build/
+sdkconfig
+.vscode/
