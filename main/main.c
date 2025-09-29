@@ -3,12 +3,15 @@
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_log.h"
+#include "lora_driver.h"
 
 void app_main(void)
 {
     printf("Hello, ESP32-S3!\n");
 
     ESP_LOGI("Hello", "Hello from ESP-IDF!");
+
+    lora_driver_init();
 
     while (1)
     {

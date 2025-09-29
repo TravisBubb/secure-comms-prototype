@@ -56,6 +56,6 @@ if (lora_driver_receive(buffer, sizeof(buffer), &len)) {
 ```
 
 ## Notes
-- Designed to be a thing abstraction over SPI register access.
+- Designed to be a thin abstraction over SPI register access.
 - Should work across different LoRa radios with minimal changes.
 - Keep this layer as simple as possible; Higher-level features belong in `lora_transport` or `lora_proto`.
