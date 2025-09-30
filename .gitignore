@@ -3,3 +3,4 @@ sdkconfig
 sdkconfig.old
 .vscode/
 compile_commands.json
+.cache/
