@@ -1,8 +1,8 @@
 #ifndef UART_TRANSPORT_H
 #define UART_TRANSPORT_H
 
-#include <stddef.h>
 #include <driver/uart.h>
+#include <stddef.h>
 
 /**
  * @brief Initialize UART transport with specified UART port and baud rate.

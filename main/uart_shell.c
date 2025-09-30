@@ -8,8 +8,8 @@
 
 typedef struct
 {
-    const char *name;
-    void (*handler)(void);
+  const char *name;
+  void (*handler)(void);
 } shell_command_t;
 
 static shell_command_t commands[SHELL_MAX_COMMANDS];
@@ -22,47 +22,46 @@ static void handle_command(uint8_t *buf, size_t len);
 
 void uart_shell_init(uart_port_t uart)
 {
-    shell_uart = uart;
-    uart_transport_init(shell_uart, baud_rate);
-    ESP_LOGI(TAG, "UART shell initialized on UART%d at %d baud.", shell_uart, baud_rate);
+  shell_uart = uart;
+  uart_transport_init(shell_uart, baud_rate);
+  ESP_LOGI(TAG, "UART shell initialized on UART%d at %d baud.", shell_uart, baud_rate);
 }
 
 void uart_shell_task(void *arg)
 {
-    uint8_t buf[UART_BUFFER_SIZE];
-    while (1)
-    {
-        size_t len = uart_transport_read(shell_uart, buf, UART_BUFFER_SIZE - 1, 10 / portTICK_PERIOD_MS);
-        if (len > 0)
-            handle_command(buf, len);
+  uint8_t buf[UART_BUFFER_SIZE];
+  while (1)
+  {
+    size_t len =
+        uart_transport_read(shell_uart, buf, UART_BUFFER_SIZE - 1, 10 / portTICK_PERIOD_MS);
+    if (len > 0)
+      handle_command(buf, len);
 
-        vTaskDelay(10 / portTICK_PERIOD_MS); // yield
-    }
+    vTaskDelay(10 / portTICK_PERIOD_MS); // yield
+  }
 }
 
 int register_shell_command(const char *name, void (*handler)(void))
 {
-    if (command_count >= SHELL_MAX_COMMANDS)
-        return -1;
+  if (command_count >= SHELL_MAX_COMMANDS)
+    return -1;
 
-    commands[command_count++] = (shell_command_t){
-        .name = name,
-        .handler = handler};
+  commands[command_count++] = (shell_command_t){.name = name, .handler = handler};
 
-    return 0;
+  return 0;
 }
 
 static void handle_command(uint8_t *buf, size_t len)
 {
-    buf[len] = '\0';                       // null terminate
-    buf[strcspn((char *)buf, "\r\n")] = 0; // remove newline characters
+  buf[len] = '\0';                       // null terminate
+  buf[strcspn((char *)buf, "\r\n")] = 0; // remove newline characters
 
-    for (size_t i = 0; i < command_count; i++)
+  for (size_t i = 0; i < command_count; i++)
+  {
+    if (strcmp((char *)buf, commands[i].name) == 0)
     {
-        if (strcmp((char *)buf, commands[i].name) == 0)
-        {
-            commands[i].handler();
-            return;
-        }
+      commands[i].handler();
+      return;
     }
+  }
 }

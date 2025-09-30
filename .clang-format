@@ -1,0 +1,11 @@
+BasedOnStyle: LLVM
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+PointerAlignment: Right
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+ColumnLimit: 100
+SortIncludes: true
+BinPackParameters: false
+BinPackArguments: false

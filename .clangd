@@ -1,2 +1,16 @@
 CompileFlags:
-    Remove: [-f*, -m*]
+  Add:
+    - "-std=c11"
+    - "-Wall"
+    - "-Wextra"
+  Remove: ["-Werror"]
+Diagnostics:
+  ClangTidy: true
+  ClangTidyChecks: >
+    clang-analyzer-*,
+    bugprone-*,
+    performance-*,
+    readability-*,
+    -readability-identifier-length,
+    -bugprone-easily-swappable-parameters,
+    -modernize*
