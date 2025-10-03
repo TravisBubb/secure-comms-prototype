@@ -47,4 +47,11 @@ esp_err_t lora_driver_send(const uint8_t *data, size_t len);
  */
 esp_err_t lora_driver_receive(uint8_t *buffer, size_t max_len, size_t *out_len);
 
+/**
+ * @brief Deinitialize the LoRa driver and free resources.
+ *
+ * @return esp_err_t ESP_OK on success, or an error code on failure.
+ */
+esp_err_t lora_driver_deinit(void);
+
 #endif // LORA_DRIVER_H
