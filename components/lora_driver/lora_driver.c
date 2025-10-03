@@ -8,6 +8,7 @@
 typedef enum
 {
   LORA_OP_SET_STANDBY = 0x80,
+  LORA_OP_SET_PACKET_TYPE = 0x8A,
 } lora_opcode_t;
 
 typedef enum
@@ -15,6 +16,13 @@ typedef enum
   LORA_STDBY_RC = 0x00,
   LORA_STDBY_XOSC = 0x01,
 } lora_standby_mode_t;
+
+typedef enum
+{
+  LORA_PACKET_TYPE_GFSK = 0x00,
+  LORA_PACKET_TYPE_LORA = 0x01,
+  LORA_PACKET_TYPE_LR_FHSS = 0x03,
+} lora_packet_type_t;
 
 static const char *TAG = "LORA_DRIVER";
 static bool is_initialized = false;
@@ -26,6 +34,7 @@ static TaskHandle_t driver_spi_task_handle;
 static void lora_driver_spi_task(void *arg);
 static esp_err_t lora_wait_busy(void);
 static esp_err_t lora_set_standby(lora_standby_mode_t mode);
+static esp_err_t lora_set_packet_type(lora_packet_type_t type);
 
 esp_err_t lora_driver_init(void)
 {
@@ -90,15 +99,22 @@ esp_err_t lora_driver_init(void)
     return ret;
   }
 
+  ret = lora_set_packet_type(LORA_PACKET_TYPE_LORA);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set packet type.");
+    return ret;
+  }
+
   // TODO:
   // [X] 1. `SetStandby(...)`: go to STDBY_RC mode if not already there
-  // [ ] 2. `SetPacketType(...)`: select LoRa protocol instead of FSK
+  // [X] 2. `SetPacketType(...)`: select LoRa protocol instead of FSK
   // [ ] 3. `SetRfFrequency(...)`: set the RF frequency
   // [ ] 4. `SetPaConfig(...)`: define Power Amplifier configuration
   // [ ] 5. `SetTxParams(...)`: define output power and ramping time
   // [ ] 6. `SetModulationParams(...)`: SF, BW, CR (LoRa)
-  // [ ] 7. `SetPacketParams(...)`: preamble, header mode, CRC, payload length mode (explicit/implicit)
-  // [ ] 8. `SetDioIrqParams(...)`: map `TxDone`/`RxDone` to DIO pins
+  // [ ] 7. `SetPacketParams(...)`: preamble, header mode, CRC, payload length mode
+  // [ ] 8. `SetDioIrqParams(...)`: map `TxDone`/`RxDone` to DIO pins 
   // [ ] 9. `WriteReg(...)`: for SyncWord if a non-default is needed
 
   is_initialized = true;
@@ -203,6 +219,8 @@ static esp_err_t lora_set_standby(lora_standby_mode_t mode)
       .rx_buffer = rx_buffer,
   };
 
+  ESP_LOGI(TAG, "Attempting to set standby mode.");
+
   ret = lora_wait_busy();
   if (ret != ESP_OK)
   {
@@ -221,6 +239,11 @@ static esp_err_t lora_set_standby(lora_standby_mode_t mode)
       return ret;
     }
   }
+  else
+  {
+    ESP_LOGE(TAG, "Failed to take SPI mutex.");
+    return ESP_FAIL;
+  }
 
   ret = lora_wait_busy();
   if (ret != ESP_OK)
@@ -230,5 +253,52 @@ static esp_err_t lora_set_standby(lora_standby_mode_t mode)
   }
 
   ESP_LOGI(TAG, "Standby mode set.");
+  return ESP_OK;
+}
+
+static esp_err_t lora_set_packet_type(lora_packet_type_t type)
+{
+  esp_err_t ret;
+  uint8_t tx_buffer[] = {LORA_OP_SET_PACKET_TYPE, type};
+
+  spi_transaction_t tran = {
+      .length = sizeof(tx_buffer) * 8,
+      .tx_buffer = tx_buffer,
+      .rx_buffer = NULL,
+  };
+
+  ESP_LOGI(TAG, "Attempting to set packet type.");
+
+  ret = lora_wait_busy();
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "An error occurred waiting for BUSY pin to go low.");
+    return ret;
+  }
+  if (xSemaphoreTake(spi_mutex, portMAX_DELAY) == pdTRUE)
+  {
+    ESP_LOGI(TAG, "Sending SetPacketType command.");
+    ret = spi_device_queue_trans(lora_handle, &tran, portMAX_DELAY);
+    xSemaphoreGive(spi_mutex);
+    if (ret != ESP_OK)
+    {
+      ESP_LOGE(TAG, "An error occurred attempting to queue SPI transaction.");
+      return ret;
+    }
+  }
+  else
+  {
+    ESP_LOGE(TAG, "Failed to take SPI mutex.");
+    return ESP_FAIL;
+  }
+
+  ret = lora_wait_busy();
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "An error occurred waiting for BUSY pin to go low.");
+    return ret;
+  }
+
+  ESP_LOGI(TAG, "Packet type set.");
   return ESP_OK;
 }
