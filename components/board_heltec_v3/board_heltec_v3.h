@@ -1,0 +1,13 @@
+#ifndef BOARD_HELTEC_V3_H
+#define BOARD_HELTEC_V3_H
+
+#include <driver/gpio.h>
+
+#define LORA_BUSY_PIN GPIO_NUM_13
+
+#define LORA_CS_PIN GPIO_NUM_8
+#define LORA_SCLK_PIN GPIO_NUM_9
+#define LORA_MOSI_PIN GPIO_NUM_10
+#define LORA_MISO_PIN GPIO_NUM_11
+
+#endif // BOARD_HELTEC_V3_H
