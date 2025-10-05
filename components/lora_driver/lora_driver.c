@@ -152,7 +152,7 @@ esp_err_t lora_driver_init(void)
   // TODO:
   // [X] 1. `SetStandby(...)`: go to STDBY_RC mode if not already there
   // [X] 2. `SetPacketType(...)`: select LoRa protocol instead of FSK
-  // [ ] 3. `SetRfFrequency(...)`: set the RF frequency
+  // [X] 3. `SetRfFrequency(...)`: set the RF frequency
   // [ ] 4. `SetPaConfig(...)`: define Power Amplifier configuration
   // [ ] 5. `SetTxParams(...)`: define output power and ramping time
   // [ ] 6. `SetModulationParams(...)`: SF, BW, CR (LoRa)
