@@ -17,4 +17,6 @@ void app_main(void)
   {
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
+
+  lora_driver_deinit();
 }
