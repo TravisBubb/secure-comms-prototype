@@ -11,20 +11,11 @@
 esp_err_t lora_driver_init(void);
 
 /**
- * @brief Set the LoRa frequency.
+ * @brief Deinitialize the LoRa driver and free resources.
  *
- * @param hz Frequency in Hertz.
  * @return esp_err_t ESP_OK on success, or an error code on failure.
  */
-esp_err_t lora_driver_set_frequency(uint32_t hz);
-
-/**
- * @brief Set the LoRa transmission power.
- *
- * @param level Power level (e.g., 0-20 dBm).
- * @return esp_err_t ESP_OK on success, or an error code on failure.
- */
-esp_err_t lora_driver_set_tx_power(int level);
+esp_err_t lora_driver_deinit(void);
 
 /**
  * @brief Send data over LoRa.
@@ -46,12 +37,5 @@ esp_err_t lora_driver_send(const uint8_t *data, size_t len);
  * @return esp_err_t ESP_OK on success, or an error code on failure.
  */
 esp_err_t lora_driver_receive(uint8_t *buffer, size_t max_len, size_t *out_len);
-
-/**
- * @brief Deinitialize the LoRa driver and free resources.
- *
- * @return esp_err_t ESP_OK on success, or an error code on failure.
- */
-esp_err_t lora_driver_deinit(void);
 
 #endif // LORA_DRIVER_H
