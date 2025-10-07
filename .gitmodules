@@ -1,0 +1,3 @@
+[submodule "components/sx126x_driver"]
+	path = components/sx126x_driver
+	url = git@github.com:TravisBubb/sx126x-driver.git

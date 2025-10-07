@@ -2,7 +2,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lora_driver.h"
+#include <sx126x/sx126x.h>
 #include <stdio.h>
 
 void app_main(void)
@@ -11,12 +11,8 @@ void app_main(void)
 
   ESP_LOGI("Hello", "Hello from ESP-IDF!");
 
-  lora_driver_init();
-
   while (1)
   {
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
-
-  lora_driver_deinit();
 }
