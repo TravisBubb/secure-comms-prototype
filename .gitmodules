@@ -1,6 +1,3 @@
 [submodule "components/arduino"]
 	path = components/arduino
 	url = https://github.com/espressif/arduino-esp32.git
-[submodule "components/heltec"]
-	path = components/heltec
-	url = https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series.git
