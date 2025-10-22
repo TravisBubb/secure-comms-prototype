@@ -2,6 +2,7 @@
 #include "uart_transport.h"
 #include <driver/uart.h>
 #include <esp_log.h>
+#include <string.h>
 
 #define UART_BUFFER_SIZE 128
 #define SHELL_MAX_COMMANDS 10
