@@ -1,4 +1,6 @@
-[submodule "components/sx126x_driver"]
-	path = components/sx126x_driver
-    branch = main
-	url = git@github.com:TravisBubb/sx126x-driver.git
+[submodule "components/arduino"]
+	path = components/arduino
+	url = https://github.com/espressif/arduino-esp32.git
+[submodule "components/heltec"]
+	path = components/heltec
+	url = https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series.git
