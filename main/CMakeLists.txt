@@ -1,4 +1,5 @@
 idf_component_register(
-    SRCS "main.c" "uart_shell.c" "uart_transport.c"
+    SRCS "main.cpp"
     INCLUDE_DIRS "include"
+    REQUIRES lora board_heltec_v3
 )

@@ -1,0 +1,42 @@
+#ifndef LORA_DRIVER_H
+#define LORA_DRIVER_H
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include "esp_err.h"
+#include "driver/spi_master.h"
+
+typedef struct {
+  int mosi;
+  int miso;
+  int sck;
+  int nss;
+  int reset;
+  int busy;
+  int dio1;
+  spi_host_device_t spi_host;
+  void (*irq_callback)(void *arg);
+} lora_config_t;
+
+typedef struct {
+  lora_config_t cfg;
+  spi_device_handle_t spi_handle;
+  bool initialized;
+} lora_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg);
+// esp_err_t lora_reset(lora_t *dev);
+// esp_err_t lora_send(lora_t *dev, const uint8_t *data, size_t len);
+// esp_err_t lora_receive(lora_t *dev, uint8_t *buffer, size_t max_len, size_t *out_len);
+esp_err_t lora_deinit(lora_t *dev);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // LORA_DRIVER_H
