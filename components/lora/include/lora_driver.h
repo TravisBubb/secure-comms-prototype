@@ -28,6 +28,13 @@ typedef struct
   bool initialized;
 } lora_t;
 
+typedef enum
+{
+  LORA_PACKET_TYPE_GFSK = 0x00,
+  LORA_PACKET_TYPE_LORA = 0x01,
+  LORA_PACKET_TYPE_LR_FHSS = 0x03,
+} lora_packet_type_t;
+
 #ifdef __cplusplus
 extern "C"
 {

@@ -10,9 +10,75 @@ static const char *TAG = "LORA";
 
 typedef enum
 {
+  LORA_CMD_GET_PACKET_TYPE = 0x11,
   LORA_CMD_SET_STANDBY = 0x80,
+  LORA_CMD_SET_PACKET_TYPE = 0x8A,
   LORA_CMD_GET_STATUS = 0xC0,
 } lora_cmd_t;
+
+static const char *lora_cmd_name(lora_cmd_t cmd)
+{
+  switch (cmd)
+  {
+  case LORA_CMD_GET_PACKET_TYPE: return "GetPacketType";
+  case LORA_CMD_SET_STANDBY: return "SetStandby";
+  case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
+  case LORA_CMD_GET_STATUS: return "GetStatus";
+  default: return "Unknown";
+  }
+}
+
+static void lora_log_buffer(const char *prefix, const uint8_t *buf, size_t len)
+{
+  if (!buf || len == 0)
+  {
+    ESP_LOGI(TAG, "%s <empty>", prefix);
+    return;
+  }
+
+  char line[128];
+  char *ptr = line;
+  size_t remaining = sizeof(line);
+
+  int written = snprintf(ptr, remaining, "%s ", prefix);
+  ptr += written;
+  remaining -= written;
+
+  for (size_t i = 0; i < len; i++)
+  {
+    if (remaining < 4)
+    { // each byte needs up to 3 chars + null
+      ESP_LOGI(TAG, "%s", line);
+      ptr = line;
+      remaining = sizeof(line);
+      written = snprintf(ptr, remaining, "%s ", prefix);
+      ptr += written;
+      remaining -= written;
+    }
+    written = snprintf(ptr, remaining, "%02X ", buf[i]);
+    ptr += written;
+    remaining -= written;
+  }
+
+  ESP_LOGI(TAG, "%s", line);
+}
+
+// Logs both TX and RX buffers in one consistent line
+static void lora_log_spi_transaction(
+    lora_cmd_t cmd, const uint8_t *tx_buf, size_t tx_len, const uint8_t *rx_buf, size_t rx_len)
+{
+  ESP_LOGI(TAG, "SPI CMD 0x%02X (%s): %u TX, %u RX", cmd, lora_cmd_name(cmd), tx_len, rx_len);
+
+  if (tx_len > 0)
+    lora_log_buffer("TX:", tx_buf, tx_len);
+  else
+    ESP_LOGI(TAG, "TX: <none>");
+
+  if (rx_len > 0)
+    lora_log_buffer("RX:", rx_buf, rx_len);
+  else
+    ESP_LOGI(TAG, "RX: <none>");
+}
 
 static esp_err_t lora_spi_init(lora_t *dev, const lora_config_t *cfg);
 static esp_err_t lora_spi_deinit(lora_t *dev);
@@ -31,6 +97,8 @@ static esp_err_t lora_spi_transfer_safe(lora_t *dev,
 static esp_err_t lora_wait_ready(lora_t *dev);
 static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *cmd_status);
 static esp_err_t lora_cmd_set_standby(lora_t *dev);
+static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_type);
+static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -66,11 +134,33 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "LoRa set to standby mode.");
 
-  vTaskDelay(pdMS_TO_TICKS(10));
+  ESP_LOGI(TAG, "Setting LoRa packet type (%d)...", LORA_PACKET_TYPE_LORA);
+  ret = lora_cmd_set_packet_type(dev, LORA_PACKET_TYPE_LORA);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set LoRa packet type: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "LoRa packet type set (%d).", LORA_PACKET_TYPE_LORA);
 
-  lora_print_status(chip_mode, cmd_status);
+  ESP_LOGI(TAG, "Verifying LoRa packet type...");
+  lora_packet_type_t pkt_type = -1;
+  ret = lora_cmd_get_packet_type(dev, &pkt_type);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to get LoRa packet type: %d.", ret);
+    return ret;
+  }
+  if (pkt_type != LORA_PACKET_TYPE_LORA)
+  {
+    ESP_LOGE(TAG,
+             "Packet type verification failed (expected 0x%02X, got 0x%02X).",
+             LORA_PACKET_TYPE_LORA,
+             pkt_type);
+    return ESP_FAIL;
+  }
+  ESP_LOGI(TAG, "LoRa packet type verified (0x%02X).", pkt_type);
 
-  // SetPacketType
   // SetRfFrequency
   // SetPaConfig
   // SetTxParams
@@ -177,31 +267,31 @@ static esp_err_t lora_spi_transfer(lora_t *dev,
   if (!dev) return ESP_ERR_INVALID_ARG;
 
   esp_err_t ret;
-  size_t total_len = 1 + (tx_len > 0 ? tx_len : 0) + (rx_len > 0 ? rx_len : 0);
-  uint8_t tx[total_len];
-  uint8_t rx[total_len];
+  size_t total_len = 1 + tx_len + rx_len;
+  if (total_len > 64) return ESP_ERR_INVALID_SIZE; // sanity limit
 
-  memset(tx, 0, sizeof(tx));
-  memset(rx, 0, sizeof(rx));
+  uint8_t tx_buf[64] = {0};
+  uint8_t rx_buf[64] = {0};
 
-  tx[0] = cmd;
-
-  if (tx_data && tx_len > 0) memcpy(tx + 1, tx_data, tx_len);
+  tx_buf[0] = cmd;
+  if (tx_data && tx_len > 0) memcpy(&tx_buf[1], tx_data, tx_len);
 
   spi_transaction_t t = {
       .length = total_len * 8,
-      .tx_buffer = tx,
-      .rx_buffer = rx,
+      .tx_buffer = tx_buf,
+      .rx_buffer = rx_buf,
   };
 
   ret = spi_device_transmit(dev->spi_handle, &t);
   if (ret != ESP_OK)
   {
-    ESP_LOGE(TAG, "SPI transfer failed: %d.", ret);
+    ESP_LOGE(TAG, "SPI transfer failed: %d", ret);
     return ret;
   }
 
-  if (rx_data && rx_len > 0) memcpy(rx_data, rx + 1 + tx_len, rx_len);
+  if (rx_data && rx_len > 0) memcpy(rx_data, &rx_buf[1 + tx_len], rx_len);
+
+  lora_log_spi_transaction(cmd, tx_buf, 1 + tx_len, rx_buf, 1 + tx_len + rx_len);
 
   return ESP_OK;
 }
@@ -259,8 +349,7 @@ static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *c
   esp_err_t ret;
   uint8_t status = 0;
 
-  if (xSemaphoreTake(dev->spi_mutex, pdMS_TO_TICKS(10)) != pdTRUE)
-    return ESP_ERR_TIMEOUT;
+  if (xSemaphoreTake(dev->spi_mutex, pdMS_TO_TICKS(10)) != pdTRUE) return ESP_ERR_TIMEOUT;
 
   ret = lora_spi_transfer(dev, LORA_CMD_GET_STATUS, NULL, 0, &status, 1);
 
@@ -278,12 +367,31 @@ static esp_err_t lora_cmd_set_standby(lora_t *dev)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
-  esp_err_t ret;
   uint8_t tx[1] = {0x00}; // STDBY_RC
 
-  ret = lora_spi_transfer_safe(dev, LORA_CMD_SET_STANDBY, tx, 1, NULL, 0);
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_STANDBY, tx, 1, NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_type)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[1] = {(uint8_t)pkt_type};
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_PACKET_TYPE, tx, 1, NULL, 0);
+}
+
+static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  esp_err_t ret;
+  uint8_t rx[2] = {0}; // 1 status + 1 data
+
+  ret = lora_spi_transfer_safe(dev, LORA_CMD_GET_PACKET_TYPE, NULL, 0, rx, sizeof(rx));
   if (ret != ESP_OK) return ret;
 
+  *pkt_type = (lora_packet_type_t)rx[1]; // skip status byte
   return ESP_OK;
 }
 
