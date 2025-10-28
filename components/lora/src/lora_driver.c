@@ -1,4 +1,5 @@
 #include "lora_driver.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
 
@@ -9,6 +10,7 @@ static const char *TAG = "LORA";
 
 typedef enum
 {
+  LORA_CMD_SET_STANDBY = 0x80,
   LORA_CMD_GET_STATUS = 0xC0,
 } lora_cmd_t;
 
@@ -20,8 +22,15 @@ static esp_err_t lora_spi_transfer(lora_t *dev,
                                    size_t tx_len,
                                    uint8_t *rx_data,
                                    size_t rx_len);
+static esp_err_t lora_spi_transfer_safe(lora_t *dev,
+                                        lora_cmd_t cmd,
+                                        const uint8_t *tx_data,
+                                        size_t tx_len,
+                                        uint8_t *rx_data,
+                                        size_t rx_len);
 static esp_err_t lora_wait_ready(lora_t *dev);
 static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *cmd_status);
+static esp_err_t lora_cmd_set_standby(lora_t *dev);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -29,6 +38,15 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   if (!dev || !cfg) return ESP_ERR_INVALID_ARG;
 
   esp_err_t ret;
+
+  vTaskDelay(pdMS_TO_TICKS(50));
+
+  dev->spi_mutex = xSemaphoreCreateMutex();
+  if (!dev->spi_mutex)
+  {
+    ESP_LOGE(TAG, "Failed to create SPI mutex.");
+    return ESP_ERR_NO_MEM;
+  }
 
   ret = lora_spi_init(dev, cfg);
   if (ret != ESP_OK) return ret;
@@ -38,6 +56,28 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   if (ret != ESP_OK) return ret;
 
   lora_print_status(chip_mode, cmd_status);
+
+  ESP_LOGI(TAG, "Setting LoRa to standby mode...");
+  ret = lora_cmd_set_standby(dev);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set LoRa to standby mode: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "LoRa set to standby mode.");
+
+  vTaskDelay(pdMS_TO_TICKS(10));
+
+  lora_print_status(chip_mode, cmd_status);
+
+  // SetPacketType
+  // SetRfFrequency
+  // SetPaConfig
+  // SetTxParams
+  // SetBufferBaseAddress
+  // SetModulationParams
+  // SetDioIrqParams
+  // WriteReg (sync word)
 
   return ESP_OK;
 }
@@ -50,6 +90,12 @@ esp_err_t lora_deinit(lora_t *dev)
 
   ret = lora_spi_deinit(dev);
   if (ret != ESP_OK) return ret;
+
+  if (dev->spi_mutex)
+  {
+    vSemaphoreDelete(dev->spi_mutex);
+    dev->spi_mutex = NULL;
+  }
 
   return ESP_OK;
 }
@@ -85,6 +131,21 @@ static esp_err_t lora_spi_init(lora_t *dev, const lora_config_t *cfg)
   if (ret != ESP_OK)
   {
     ESP_LOGE(TAG, "Failed to add SPI device: %d.", ret);
+    return ret;
+  }
+
+  gpio_config_t io_cfg = {
+      .pin_bit_mask = 1ULL << cfg->busy,
+      .mode = GPIO_MODE_INPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_PULLDOWN_DISABLE,
+      .intr_type = GPIO_INTR_DISABLE,
+  };
+
+  ret = gpio_config(&io_cfg);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to configure BUSY pin: %d.", ret);
     return ret;
   }
 
@@ -145,34 +206,47 @@ static esp_err_t lora_spi_transfer(lora_t *dev,
   return ESP_OK;
 }
 
+static esp_err_t lora_spi_transfer_safe(lora_t *dev,
+                                        lora_cmd_t cmd,
+                                        const uint8_t *tx_data,
+                                        size_t tx_len,
+                                        uint8_t *rx_data,
+                                        size_t rx_len)
+{
+  if (!dev || !dev->spi_mutex) return ESP_ERR_INVALID_ARG;
+
+  esp_err_t ret;
+
+  ret = lora_wait_ready(dev);
+  if (ret != ESP_OK) return ret;
+
+  if (xSemaphoreTake(dev->spi_mutex, pdMS_TO_TICKS(10)) != pdTRUE) return ESP_ERR_TIMEOUT;
+
+  ret = lora_spi_transfer(dev, cmd, tx_data, tx_len, rx_data, rx_len);
+
+  xSemaphoreGive(dev->spi_mutex);
+
+  ret = lora_wait_ready(dev);
+  if (ret != ESP_OK) return ret;
+
+  return ret;
+}
+
 static esp_err_t lora_wait_ready(lora_t *dev)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
-  esp_err_t ret;
-  uint8_t chip_mode, cmd_status;
-  int elapsed_ms = 0;
-
-  while (1)
+  uint32_t elapsed = 0;
+  while (gpio_get_level(dev->cfg.busy) == 1)
   {
-    ret = lora_cmd_get_status(dev, &chip_mode, &cmd_status);
-    if (ret != ESP_OK) return ret;
-
-    // Command status 0 = no error, not busy
-    // According to Table 13-76 in datasheet, if cmd_status != 0x4 or 0x5, etc., chip is ready
-    if (cmd_status == 0) break;
-
-    if (elapsed_ms >= LORA_READY_TIMEOUT_MS)
+    if (elapsed >= LORA_READY_TIMEOUT_MS)
     {
-      ESP_LOGW(TAG,
-               "LoRa wait until ready timeout: chip_mode=%02X, cmd_status=%02X.",
-               chip_mode,
-               cmd_status);
+      ESP_LOGE(TAG, "Timeout waiting for BUSY pin to clear");
       return ESP_ERR_TIMEOUT;
     }
 
     vTaskDelay(pdMS_TO_TICKS(LORA_READY_POLL_INTERVAL_MS));
-    elapsed_ms += LORA_READY_POLL_INTERVAL_MS;
+    elapsed += LORA_READY_POLL_INTERVAL_MS;
   }
 
   return ESP_OK;
@@ -180,16 +254,35 @@ static esp_err_t lora_wait_ready(lora_t *dev)
 
 static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *cmd_status)
 {
-  if (!dev) return ESP_ERR_INVALID_ARG;
+  if (!dev || !dev->spi_mutex) return ESP_ERR_INVALID_ARG;
 
   esp_err_t ret;
   uint8_t status = 0;
 
+  if (xSemaphoreTake(dev->spi_mutex, pdMS_TO_TICKS(10)) != pdTRUE)
+    return ESP_ERR_TIMEOUT;
+
   ret = lora_spi_transfer(dev, LORA_CMD_GET_STATUS, NULL, 0, &status, 1);
+
+  xSemaphoreGive(dev->spi_mutex);
+
   if (ret != ESP_OK) return ret;
 
   if (chip_mode) *chip_mode = (status >> 4) & 0x07;
   if (cmd_status) *cmd_status = (status >> 1) & 0x07;
+
+  return ESP_OK;
+}
+
+static esp_err_t lora_cmd_set_standby(lora_t *dev)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  esp_err_t ret;
+  uint8_t tx[1] = {0x00}; // STDBY_RC
+
+  ret = lora_spi_transfer_safe(dev, LORA_CMD_SET_STANDBY, tx, 1, NULL, 0);
+  if (ret != ESP_OK) return ret;
 
   return ESP_OK;
 }

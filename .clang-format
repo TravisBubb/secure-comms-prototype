@@ -5,7 +5,6 @@ UseTab: Never
 PointerAlignment: Right
 BreakBeforeBraces: Allman
 AllowShortIfStatementsOnASingleLine: true
-AllowShortElseOnASingleLine: true
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortBlocksOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Inline
@@ -14,4 +13,3 @@ SortIncludes: true
 BinPackParameters: false
 BinPackArguments: false
 AlwaysBreakBeforeMultilineStrings: false
-IndentBraces: false

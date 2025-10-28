@@ -1,13 +1,14 @@
 #ifndef LORA_DRIVER_H
 #define LORA_DRIVER_H
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stddef.h>
-#include "esp_err.h"
 #include "driver/spi_master.h"
+#include "esp_err.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-typedef struct {
+typedef struct
+{
   int mosi;
   int miso;
   int sck;
@@ -19,21 +20,24 @@ typedef struct {
   void (*irq_callback)(void *arg);
 } lora_config_t;
 
-typedef struct {
+typedef struct
+{
   lora_config_t cfg;
   spi_device_handle_t spi_handle;
+  SemaphoreHandle_t spi_mutex;
   bool initialized;
 } lora_t;
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg);
-// esp_err_t lora_reset(lora_t *dev);
-// esp_err_t lora_send(lora_t *dev, const uint8_t *data, size_t len);
-// esp_err_t lora_receive(lora_t *dev, uint8_t *buffer, size_t max_len, size_t *out_len);
-esp_err_t lora_deinit(lora_t *dev);
+  esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg);
+  // esp_err_t lora_reset(lora_t *dev);
+  // esp_err_t lora_send(lora_t *dev, const uint8_t *data, size_t len);
+  // esp_err_t lora_receive(lora_t *dev, uint8_t *buffer, size_t max_len, size_t *out_len);
+  esp_err_t lora_deinit(lora_t *dev);
 
 #ifdef __cplusplus
 }
