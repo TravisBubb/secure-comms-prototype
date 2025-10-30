@@ -16,6 +16,7 @@ typedef struct
   int reset;
   int busy;
   int dio1;
+  long frequency;
   spi_host_device_t spi_host;
   void (*irq_callback)(void *arg);
 } lora_config_t;

@@ -29,6 +29,7 @@ extern "C" void app_main(void)
   cfg.dio1 = LORA_DIO1;
   cfg.spi_host = SPI2_HOST;
   cfg.irq_callback = nullptr;
+  cfg.frequency = 915E6;
 
   ESP_LOGI(TAG, "Initializing LoRa device...");
   ret = lora_init(&dev, &cfg);

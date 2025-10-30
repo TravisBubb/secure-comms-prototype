@@ -12,6 +12,7 @@ typedef enum
 {
   LORA_CMD_GET_PACKET_TYPE = 0x11,
   LORA_CMD_SET_STANDBY = 0x80,
+  LORA_CMD_SET_RF_FREQUENCY = 0x86,
   LORA_CMD_SET_PACKET_TYPE = 0x8A,
   LORA_CMD_GET_STATUS = 0xC0,
 } lora_cmd_t;
@@ -22,6 +23,7 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
   {
   case LORA_CMD_GET_PACKET_TYPE: return "GetPacketType";
   case LORA_CMD_SET_STANDBY: return "SetStandby";
+  case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
   case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
   case LORA_CMD_GET_STATUS: return "GetStatus";
   default: return "Unknown";
@@ -69,15 +71,11 @@ static void lora_log_spi_transaction(
 {
   ESP_LOGI(TAG, "SPI CMD 0x%02X (%s): %u TX, %u RX", cmd, lora_cmd_name(cmd), tx_len, rx_len);
 
-  if (tx_len > 0)
-    lora_log_buffer("TX:", tx_buf, tx_len);
-  else
-    ESP_LOGI(TAG, "TX: <none>");
+  if (tx_len > 0) lora_log_buffer("TX:", tx_buf, tx_len);
+  else ESP_LOGI(TAG, "TX: <none>");
 
-  if (rx_len > 0)
-    lora_log_buffer("RX:", rx_buf, rx_len);
-  else
-    ESP_LOGI(TAG, "RX: <none>");
+  if (rx_len > 0) lora_log_buffer("RX:", rx_buf, rx_len);
+  else ESP_LOGI(TAG, "RX: <none>");
 }
 
 static esp_err_t lora_spi_init(lora_t *dev, const lora_config_t *cfg);
@@ -99,6 +97,7 @@ static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *c
 static esp_err_t lora_cmd_set_standby(lora_t *dev);
 static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_type);
 static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type);
+static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -161,7 +160,15 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "LoRa packet type verified (0x%02X).", pkt_type);
 
-  // SetRfFrequency
+  ESP_LOGI(TAG, "Setting RF frequency (%ld)...", cfg->frequency);
+  ret = lora_cmd_set_rf_frequency(dev, cfg->frequency);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set RF frequency: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "RF frequency set (%ld).", cfg->frequency);
+
   // SetPaConfig
   // SetTxParams
   // SetBufferBaseAddress
@@ -393,6 +400,21 @@ static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_t
 
   *pkt_type = (lora_packet_type_t)rx[1]; // skip status byte
   return ESP_OK;
+}
+
+static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint64_t frf = ((uint64_t)frequency << 25) / 32000000;
+  uint8_t tx[4] = {
+      (uint8_t)((frf >> 24) & 0xFF),
+      (uint8_t)((frf >> 16) & 0xFF),
+      (uint8_t)((frf >> 8) & 0xFF),
+      (uint8_t)(frf & 0xFF),
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_RF_FREQUENCY, tx, sizeof(tx), NULL, 0);
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)
