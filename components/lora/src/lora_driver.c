@@ -14,7 +14,9 @@ typedef enum
   LORA_CMD_SET_STANDBY = 0x80,
   LORA_CMD_SET_RF_FREQUENCY = 0x86,
   LORA_CMD_SET_PACKET_TYPE = 0x8A,
+  LORA_CMD_SET_MODULATION_PARAMS = 0x8B,
   LORA_CMD_SET_TX_PARAMS = 0x8E,
+  LORA_CMD_SET_BUFFER_BASE_ADDRESS = 0x8F,
   LORA_CMD_SET_PA_CONFIG = 0x95,
   LORA_CMD_GET_STATUS = 0xC0,
 } lora_cmd_t;
@@ -27,7 +29,9 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
   case LORA_CMD_SET_STANDBY: return "SetStandby";
   case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
   case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
+  case LORA_CMD_SET_MODULATION_PARAMS: return "SetModulationParams";
   case LORA_CMD_SET_TX_PARAMS: return "SetTxParams";
+  case LORA_CMD_SET_BUFFER_BASE_ADDRESS: return "SetBufferBaseAddress";
   case LORA_CMD_SET_PA_CONFIG: return "SetPaConfig";
   case LORA_CMD_GET_STATUS: return "GetStatus";
   default: return "Unknown";
@@ -104,6 +108,8 @@ static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_t
 static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency);
 static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t hp_max, lora_device_type_t device_sel);
 static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t power, uint8_t ramp_time);
+static esp_err_t lora_cmd_set_buffer_base_address(lora_t *dev, uint8_t tx_addr, uint8_t rx_addr);
+static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -193,9 +199,24 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "TX params set.");
 
-  // SetTxParams
-  // SetBufferBaseAddress
-  // SetModulationParams
+  ESP_LOGI(TAG, "Setting buffer base addresses: TX (0x%02X) RX (0x%02X)...", 0x00, 0x00);
+  ret = lora_cmd_set_buffer_base_address(dev, 0x00, 0x00);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set buffer base addresses: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "Buffer base addresses set.");
+
+  ESP_LOGI(TAG, "Setting modulation params: SF (0x%02X) BW (0x%02X) CR (0x%02X) LDRO (0x%02X)...", cfg->sf, cfg->bw, cfg->cr, cfg->ldro);
+  ret = lora_cmd_set_modulation_params(dev, cfg->sf, cfg->bw, cfg->cr, cfg->ldro);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set modulation params: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "Modulation params set.");
+
   // SetDioIrqParams
   // WriteReg (sync word)
 
@@ -466,6 +487,32 @@ static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t tx_power, uint8_t ra
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_TX_PARAMS, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_buffer_base_address(lora_t *dev, uint8_t tx_addr, uint8_t rx_addr)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[2] = {
+    tx_addr,
+    rx_addr,
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_BUFFER_BASE_ADDRESS, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[4] = {
+    sf,
+    bw,
+    cr,
+    ldro
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_MODULATION_PARAMS, tx, sizeof(tx), NULL, 0);
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)

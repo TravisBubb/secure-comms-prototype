@@ -36,6 +36,11 @@ extern "C" void app_main(void)
   cfg.tx_power = 14; // dBm
   cfg.ramp_time = 0x04; // 200 us ramp
 
+  cfg.sf = 0x07; // SF7
+  cfg.bw = 0x04; // 125kHz
+  cfg.cr = 0x01; // 4/5
+  cfg.ldro = 0x00; // OFF
+
   ESP_LOGI(TAG, "Initializing LoRa device...");
   ret = lora_init(&dev, &cfg);
   if (ret != ESP_OK)

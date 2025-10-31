@@ -29,6 +29,10 @@ typedef struct
   int8_t tx_power;
   uint8_t ramp_time;
   spi_host_device_t spi_host;
+  uint8_t sf;
+  uint8_t bw;
+  uint8_t cr;
+  uint8_t ldro;
   void (*irq_callback)(void *arg);
 } lora_config_t;
 
