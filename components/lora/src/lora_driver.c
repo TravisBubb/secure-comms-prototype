@@ -9,7 +9,7 @@
 
 static const char *TAG = "LORA";
 
-typedef enum 
+typedef enum
 {
   LORA_IRQ_NONE = 0x0000, // no IRQ
   LORA_IRQ_TX_DONE = 1 << 0,
@@ -101,11 +101,15 @@ static void lora_log_spi_transaction(
 {
   ESP_LOGI(TAG, "SPI CMD 0x%02X (%s): %u TX, %u RX", cmd, lora_cmd_name(cmd), tx_len, rx_len);
 
-  if (tx_len > 0) lora_log_buffer("TX:", tx_buf, tx_len);
-  else ESP_LOGI(TAG, "TX: <none>");
+  if (tx_len > 0)
+    lora_log_buffer("TX:", tx_buf, tx_len);
+  else
+    ESP_LOGI(TAG, "TX: <none>");
 
-  if (rx_len > 0) lora_log_buffer("RX:", rx_buf, rx_len);
-  else ESP_LOGI(TAG, "RX: <none>");
+  if (rx_len > 0)
+    lora_log_buffer("RX:", rx_buf, rx_len);
+  else
+    ESP_LOGI(TAG, "RX: <none>");
 }
 
 static esp_err_t lora_spi_init(lora_t *dev, const lora_config_t *cfg);
@@ -128,12 +132,18 @@ static esp_err_t lora_cmd_set_standby(lora_t *dev);
 static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_type);
 static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type);
 static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency);
-static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t hp_max, lora_device_type_t device_sel);
+static esp_err_t lora_cmd_set_pa_config(lora_t *dev,
+                                        uint8_t duty_cycle,
+                                        uint8_t hp_max,
+                                        lora_device_type_t device_sel);
 static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t power, uint8_t ramp_time);
 static esp_err_t lora_cmd_set_buffer_base_address(lora_t *dev, uint8_t tx_addr, uint8_t rx_addr);
-static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro);
-static esp_err_t lora_cmd_set_dio_irq_params(lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask);
-static esp_err_t lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len);
+static esp_err_t
+lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro);
+static esp_err_t lora_cmd_set_dio_irq_params(
+    lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask);
+static esp_err_t
+lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len);
 static esp_err_t lora_cmd_read_register(lora_t *dev, uint16_t addr, uint8_t *data, size_t len);
 static esp_err_t lora_cmd_set_syncword(lora_t *dev, uint16_t syncword);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
@@ -183,7 +193,8 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   ESP_LOGI(TAG, "Verifying LoRa packet type...");
   lora_packet_type_t pkt_type = -1;
   int retries = 5;
-  do {
+  do
+  {
     ret = lora_cmd_get_packet_type(dev, &pkt_type);
     if (ret != ESP_OK)
     {
@@ -212,7 +223,11 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "RF frequency set (%ld).", cfg->frequency);
 
-  ESP_LOGI(TAG, "Setting PA config: duty_cycle (0x%02X) hp_max (0x%02X) device_sel (0x%02X)...", cfg->duty_cycle, cfg->hp_max, cfg->device_sel);
+  ESP_LOGI(TAG,
+           "Setting PA config: duty_cycle (0x%02X) hp_max (0x%02X) device_sel (0x%02X)...",
+           cfg->duty_cycle,
+           cfg->hp_max,
+           cfg->device_sel);
   ret = lora_cmd_set_pa_config(dev, cfg->duty_cycle, cfg->hp_max, cfg->device_sel);
   if (ret != ESP_OK)
   {
@@ -221,7 +236,8 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "PA config set.");
 
-  ESP_LOGI(TAG, "Setting TX params: power (%ddBm) ramp_time (0x%02X)...", cfg->tx_power, cfg->ramp_time);
+  ESP_LOGI(
+      TAG, "Setting TX params: power (%ddBm) ramp_time (0x%02X)...", cfg->tx_power, cfg->ramp_time);
   ret = lora_cmd_set_tx_params(dev, cfg->tx_power, cfg->ramp_time);
   if (ret != ESP_OK)
   {
@@ -239,7 +255,12 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "Buffer base addresses set.");
 
-  ESP_LOGI(TAG, "Setting modulation params: SF (0x%02X) BW (0x%02X) CR (0x%02X) LDRO (0x%02X)...", cfg->sf, cfg->bw, cfg->cr, cfg->ldro);
+  ESP_LOGI(TAG,
+           "Setting modulation params: SF (0x%02X) BW (0x%02X) CR (0x%02X) LDRO (0x%02X)...",
+           cfg->sf,
+           cfg->bw,
+           cfg->cr,
+           cfg->ldro);
   ret = lora_cmd_set_modulation_params(dev, cfg->sf, cfg->bw, cfg->cr, cfg->ldro);
   if (ret != ESP_OK)
   {
@@ -250,7 +271,12 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
 
   uint16_t irq_mask = LORA_IRQ_TX_DONE | LORA_IRQ_RX_DONE | LORA_IRQ_TIMEOUT;
   uint16_t dio1_mask = LORA_IRQ_TX_DONE | LORA_IRQ_RX_DONE;
-  ESP_LOGI(TAG, "Setting DIO IRQ params: irq_mask (0x%02X) dio1 (0x%02X) dio2 (0x%02X) dio3 (0x%02X)...", irq_mask, dio1_mask, LORA_IRQ_NONE, LORA_IRQ_NONE);
+  ESP_LOGI(TAG,
+           "Setting DIO IRQ params: irq_mask (0x%02X) dio1 (0x%02X) dio2 (0x%02X) dio3 (0x%02X)...",
+           irq_mask,
+           dio1_mask,
+           LORA_IRQ_NONE,
+           LORA_IRQ_NONE);
   ret = lora_cmd_set_dio_irq_params(dev, irq_mask, dio1_mask, LORA_IRQ_NONE, LORA_IRQ_NONE);
   if (ret != ESP_OK)
   {
@@ -280,10 +306,7 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   uint16_t syncword = ((uint16_t)buf[0] << 8) | buf[1];
   if (syncword != cfg->syncword)
   {
-    ESP_LOGE(TAG,
-             "Syncword failed (expected 0x%02X, got 0x%02X).",
-             cfg->syncword,
-             syncword);
+    ESP_LOGE(TAG, "Syncword failed (expected 0x%02X, got 0x%02X).", cfg->syncword, syncword);
     return ESP_FAIL;
   }
   ESP_LOGI(TAG, "Syncword verified (0x%02X).", syncword);
@@ -531,15 +554,18 @@ static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency)
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_RF_FREQUENCY, tx, sizeof(tx), NULL, 0);
 }
 
-static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t hp_max, lora_device_type_t device_sel)
+static esp_err_t lora_cmd_set_pa_config(lora_t *dev,
+                                        uint8_t duty_cycle,
+                                        uint8_t hp_max,
+                                        lora_device_type_t device_sel)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
   uint8_t tx[4] = {
-    duty_cycle,
-    hp_max,
-    (uint8_t)device_sel,
-    0x01, // PA Lut, always 0x01
+      duty_cycle,
+      hp_max,
+      (uint8_t)device_sel,
+      0x01, // PA Lut, always 0x01
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_PA_CONFIG, tx, sizeof(tx), NULL, 0);
@@ -550,8 +576,8 @@ static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t tx_power, uint8_t ra
   if (!dev) return ESP_ERR_INVALID_ARG;
 
   uint8_t tx[2] = {
-    (uint8_t)tx_power,
-    ramp_time,
+      (uint8_t)tx_power,
+      ramp_time,
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_TX_PARAMS, tx, sizeof(tx), NULL, 0);
@@ -562,56 +588,54 @@ static esp_err_t lora_cmd_set_buffer_base_address(lora_t *dev, uint8_t tx_addr, 
   if (!dev) return ESP_ERR_INVALID_ARG;
 
   uint8_t tx[2] = {
-    tx_addr,
-    rx_addr,
+      tx_addr,
+      rx_addr,
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_BUFFER_BASE_ADDRESS, tx, sizeof(tx), NULL, 0);
 }
 
-static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro)
+static esp_err_t
+lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
-  uint8_t tx[4] = {
-    sf,
-    bw,
-    cr,
-    ldro
-  };
+  uint8_t tx[4] = {sf, bw, cr, ldro};
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_MODULATION_PARAMS, tx, sizeof(tx), NULL, 0);
 }
 
-static esp_err_t lora_cmd_set_dio_irq_params(lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask)
+static esp_err_t lora_cmd_set_dio_irq_params(
+    lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
   uint8_t tx[8] = {
-    (uint8_t)(irq_mask >> 8),
-    (uint8_t)(irq_mask >> 0),
-    (uint8_t)(dio1_mask >> 8),
-    (uint8_t)(dio1_mask >> 0),
-    (uint8_t)(dio2_mask >> 8),
-    (uint8_t)(dio2_mask >> 0),
-    (uint8_t)(dio3_mask >> 8),
-    (uint8_t)(dio3_mask >> 0),
+      (uint8_t)(irq_mask >> 8),
+      (uint8_t)(irq_mask >> 0),
+      (uint8_t)(dio1_mask >> 8),
+      (uint8_t)(dio1_mask >> 0),
+      (uint8_t)(dio2_mask >> 8),
+      (uint8_t)(dio2_mask >> 0),
+      (uint8_t)(dio3_mask >> 8),
+      (uint8_t)(dio3_mask >> 0),
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_DIO_IRQ_PARAMS, tx, sizeof(tx), NULL, 0);
 }
 
-static esp_err_t lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len)
+static esp_err_t
+lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len)
 {
-    if (!dev || (!data && len > 0)) return ESP_ERR_INVALID_ARG;
-    if (len == 0) return ESP_OK;
+  if (!dev || (!data && len > 0)) return ESP_ERR_INVALID_ARG;
+  if (len == 0) return ESP_OK;
 
-    uint8_t tx[2 + len];
-    tx[0] = (uint8_t)(addr >> 8);   // addr MSB
-    tx[1] = (uint8_t)(addr & 0xFF); // addr LSB
-    memcpy(&tx[2], data, len);
+  uint8_t tx[2 + len];
+  tx[0] = (uint8_t)(addr >> 8);   // addr MSB
+  tx[1] = (uint8_t)(addr & 0xFF); // addr LSB
+  memcpy(&tx[2], data, len);
 
-    return lora_spi_transfer_safe(dev, LORA_CMD_WRITE_REGISTER, tx, sizeof(tx), NULL, 0);
+  return lora_spi_transfer_safe(dev, LORA_CMD_WRITE_REGISTER, tx, sizeof(tx), NULL, 0);
 }
 
 static esp_err_t lora_cmd_read_register(lora_t *dev, uint16_t addr, uint8_t *data, size_t len)
@@ -625,7 +649,8 @@ static esp_err_t lora_cmd_read_register(lora_t *dev, uint16_t addr, uint8_t *dat
 
   uint8_t rx[len];
 
-  esp_err_t ret = lora_spi_transfer_safe(dev, LORA_CMD_READ_REGISTER, tx, sizeof(tx), rx, sizeof(rx));
+  esp_err_t ret =
+      lora_spi_transfer_safe(dev, LORA_CMD_READ_REGISTER, tx, sizeof(tx), rx, sizeof(rx));
   if (ret != ESP_OK) return ret;
 
   memcpy(data, rx, len);
@@ -636,10 +661,7 @@ static esp_err_t lora_cmd_set_syncword(lora_t *dev, uint16_t syncword)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
-  uint8_t buf[2] = {
-      (uint8_t)(syncword >> 8),
-      (uint8_t)(syncword & 0xFF)
-  };
+  uint8_t buf[2] = {(uint8_t)(syncword >> 8), (uint8_t)(syncword & 0xFF)};
 
   return lora_cmd_write_register(dev, LORA_REG_SYNC_WORD_ADDR, buf, sizeof(buf));
 }

@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef enum 
+typedef enum
 {
   LORA_DEVICE_TYPE_SX1262 = 0x00,
   LORA_DEVICE_TYPE_SX1261 = 0x01,
