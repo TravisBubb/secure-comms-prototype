@@ -7,6 +7,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum 
+{
+  LORA_DEVICE_TYPE_SX1262 = 0x00,
+  LORA_DEVICE_TYPE_SX1261 = 0x01,
+} lora_device_type_t;
+
 typedef struct
 {
   int mosi;
@@ -17,6 +23,9 @@ typedef struct
   int busy;
   int dio1;
   long frequency;
+  uint8_t duty_cycle;
+  uint8_t hp_max;
+  lora_device_type_t device_sel;
   spi_host_device_t spi_host;
   void (*irq_callback)(void *arg);
 } lora_config_t;

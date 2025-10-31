@@ -14,6 +14,7 @@ typedef enum
   LORA_CMD_SET_STANDBY = 0x80,
   LORA_CMD_SET_RF_FREQUENCY = 0x86,
   LORA_CMD_SET_PACKET_TYPE = 0x8A,
+  LORA_CMD_SET_PA_CONFIG = 0x95,
   LORA_CMD_GET_STATUS = 0xC0,
 } lora_cmd_t;
 
@@ -25,6 +26,7 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
   case LORA_CMD_SET_STANDBY: return "SetStandby";
   case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
   case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
+  case LORA_CMD_SET_PA_CONFIG: return "SetPaConfig";
   case LORA_CMD_GET_STATUS: return "GetStatus";
   default: return "Unknown";
   }
@@ -98,6 +100,7 @@ static esp_err_t lora_cmd_set_standby(lora_t *dev);
 static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_type);
 static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type);
 static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency);
+static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t hp_max, lora_device_type_t device_sel);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -169,7 +172,15 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "RF frequency set (%ld).", cfg->frequency);
 
-  // SetPaConfig
+  ESP_LOGI(TAG, "Setting PA config: duty_cycle (0x%02X) hp_max (0x%02X) device_sel (0x%02X)...", cfg->duty_cycle, cfg->hp_max, cfg->device_sel);
+  ret = lora_cmd_set_pa_config(dev, cfg->duty_cycle, cfg->hp_max, cfg->device_sel);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set PA config: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "PA config set.");
+
   // SetTxParams
   // SetBufferBaseAddress
   // SetModulationParams
@@ -326,6 +337,8 @@ static esp_err_t lora_spi_transfer_safe(lora_t *dev,
   ret = lora_wait_ready(dev);
   if (ret != ESP_OK) return ret;
 
+  esp_rom_delay_us(100); // small delay to let internal state settle
+
   return ret;
 }
 
@@ -415,6 +428,20 @@ static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency)
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_RF_FREQUENCY, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t hp_max, lora_device_type_t device_sel)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[4] = {
+    duty_cycle,
+    hp_max,
+    (uint8_t)device_sel,
+    0x01, // PA Lut, always 0x01
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_PA_CONFIG, tx, sizeof(tx), NULL, 0);
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)
