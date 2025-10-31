@@ -33,6 +33,7 @@ typedef struct
   uint8_t bw;
   uint8_t cr;
   uint8_t ldro;
+  uint16_t syncword;
   void (*irq_callback)(void *arg);
 } lora_config_t;
 

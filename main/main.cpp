@@ -20,6 +20,7 @@ extern "C" void app_main(void)
 
   lora_t dev = {0};
   lora_config_t cfg = {0};
+
   cfg.nss = LORA_NSS;
   cfg.sck = LORA_SCK;
   cfg.mosi = LORA_MOSI;
@@ -28,8 +29,11 @@ extern "C" void app_main(void)
   cfg.busy = LORA_BUSY;
   cfg.dio1 = LORA_DIO1;
   cfg.spi_host = SPI2_HOST;
+
   cfg.irq_callback = nullptr;
+
   cfg.frequency = 915E6;
+
   cfg.duty_cycle = 0x02;
   cfg.hp_max = 0x02;
   cfg.device_sel = LORA_DEVICE_TYPE_SX1262;
@@ -40,6 +44,8 @@ extern "C" void app_main(void)
   cfg.bw = 0x04; // 125kHz
   cfg.cr = 0x01; // 4/5
   cfg.ldro = 0x00; // OFF
+
+  cfg.syncword = 0x1424;
 
   ESP_LOGI(TAG, "Initializing LoRa device...");
   ret = lora_init(&dev, &cfg);

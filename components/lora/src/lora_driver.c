@@ -5,6 +5,7 @@
 
 #define LORA_READY_TIMEOUT_MS 100
 #define LORA_READY_POLL_INTERVAL_MS 1
+#define LORA_REG_SYNC_WORD_ADDR 0x0740u
 
 static const char *TAG = "LORA";
 
@@ -26,7 +27,9 @@ typedef enum
 typedef enum
 {
   LORA_CMD_SET_DIO_IRQ_PARAMS = 0x08,
+  LORA_CMD_WRITE_REGISTER = 0x0D,
   LORA_CMD_GET_PACKET_TYPE = 0x11,
+  LORA_CMD_READ_REGISTER = 0x1D,
   LORA_CMD_SET_STANDBY = 0x80,
   LORA_CMD_SET_RF_FREQUENCY = 0x86,
   LORA_CMD_SET_PACKET_TYPE = 0x8A,
@@ -42,7 +45,9 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
   switch (cmd)
   {
   case LORA_CMD_SET_DIO_IRQ_PARAMS: return "SetDioIrqParams";
+  case LORA_CMD_WRITE_REGISTER: return "WriteRegister";
   case LORA_CMD_GET_PACKET_TYPE: return "GetPacketType";
+  case LORA_CMD_READ_REGISTER: return "ReadRegister";
   case LORA_CMD_SET_STANDBY: return "SetStandby";
   case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
   case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
@@ -128,6 +133,9 @@ static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t power, uint8_t ramp_
 static esp_err_t lora_cmd_set_buffer_base_address(lora_t *dev, uint8_t tx_addr, uint8_t rx_addr);
 static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro);
 static esp_err_t lora_cmd_set_dio_irq_params(lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask);
+static esp_err_t lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len);
+static esp_err_t lora_cmd_read_register(lora_t *dev, uint16_t addr, uint8_t *data, size_t len);
+static esp_err_t lora_cmd_set_syncword(lora_t *dev, uint16_t syncword);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -251,7 +259,34 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "DIO IRQ params set.");
 
-  // WriteReg (sync word)
+  ESP_LOGI(TAG, "Setting syncword: 0x%02X", cfg->syncword);
+  ret = lora_cmd_set_syncword(dev, cfg->syncword);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set syncword: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "Sync word set.");
+
+  ESP_LOGI(TAG, "Verifying syncword...");
+  uint8_t buf[2] = {0};
+  ret = lora_cmd_read_register(dev, LORA_REG_SYNC_WORD_ADDR, buf, 2);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to get syncword: %d.", ret);
+    return ret;
+  }
+
+  uint16_t syncword = ((uint16_t)buf[0] << 8) | buf[1];
+  if (syncword != cfg->syncword)
+  {
+    ESP_LOGE(TAG,
+             "Syncword failed (expected 0x%02X, got 0x%02X).",
+             cfg->syncword,
+             syncword);
+    return ESP_FAIL;
+  }
+  ESP_LOGI(TAG, "Syncword verified (0x%02X).", syncword);
 
   return ESP_OK;
 }
@@ -564,6 +599,49 @@ static esp_err_t lora_cmd_set_dio_irq_params(lora_t *dev, uint16_t irq_mask, uin
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_DIO_IRQ_PARAMS, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len)
+{
+    if (!dev || (!data && len > 0)) return ESP_ERR_INVALID_ARG;
+    if (len == 0) return ESP_OK;
+
+    uint8_t tx[2 + len];
+    tx[0] = (uint8_t)(addr >> 8);   // addr MSB
+    tx[1] = (uint8_t)(addr & 0xFF); // addr LSB
+    memcpy(&tx[2], data, len);
+
+    return lora_spi_transfer_safe(dev, LORA_CMD_WRITE_REGISTER, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_read_register(lora_t *dev, uint16_t addr, uint8_t *data, size_t len)
+{
+  if (!dev || !data || len == 0) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[3]; // 2-byte address + 1 dummy
+  tx[0] = (uint8_t)(addr >> 8);
+  tx[1] = (uint8_t)(addr & 0xFF);
+  tx[2] = 0x00;
+
+  uint8_t rx[len];
+
+  esp_err_t ret = lora_spi_transfer_safe(dev, LORA_CMD_READ_REGISTER, tx, sizeof(tx), rx, sizeof(rx));
+  if (ret != ESP_OK) return ret;
+
+  memcpy(data, rx, len);
+  return ESP_OK;
+}
+
+static esp_err_t lora_cmd_set_syncword(lora_t *dev, uint16_t syncword)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t buf[2] = {
+      (uint8_t)(syncword >> 8),
+      (uint8_t)(syncword & 0xFF)
+  };
+
+  return lora_cmd_write_register(dev, LORA_REG_SYNC_WORD_ADDR, buf, sizeof(buf));
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)
