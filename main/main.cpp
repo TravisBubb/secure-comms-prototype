@@ -30,9 +30,11 @@ extern "C" void app_main(void)
   cfg.spi_host = SPI2_HOST;
   cfg.irq_callback = nullptr;
   cfg.frequency = 915E6;
-  cfg.duty_cycle = 0x02; // +14dBm
+  cfg.duty_cycle = 0x02;
   cfg.hp_max = 0x02;
   cfg.device_sel = LORA_DEVICE_TYPE_SX1262;
+  cfg.tx_power = 14; // dBm
+  cfg.ramp_time = 0x04; // 200 us ramp
 
   ESP_LOGI(TAG, "Initializing LoRa device...");
   ret = lora_init(&dev, &cfg);

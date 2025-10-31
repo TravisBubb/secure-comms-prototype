@@ -14,6 +14,7 @@ typedef enum
   LORA_CMD_SET_STANDBY = 0x80,
   LORA_CMD_SET_RF_FREQUENCY = 0x86,
   LORA_CMD_SET_PACKET_TYPE = 0x8A,
+  LORA_CMD_SET_TX_PARAMS = 0x8E,
   LORA_CMD_SET_PA_CONFIG = 0x95,
   LORA_CMD_GET_STATUS = 0xC0,
 } lora_cmd_t;
@@ -26,6 +27,7 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
   case LORA_CMD_SET_STANDBY: return "SetStandby";
   case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
   case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
+  case LORA_CMD_SET_TX_PARAMS: return "SetTxParams";
   case LORA_CMD_SET_PA_CONFIG: return "SetPaConfig";
   case LORA_CMD_GET_STATUS: return "GetStatus";
   default: return "Unknown";
@@ -101,6 +103,7 @@ static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_ty
 static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type);
 static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency);
 static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t hp_max, lora_device_type_t device_sel);
+static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t power, uint8_t ramp_time);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -180,6 +183,15 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
     return ret;
   }
   ESP_LOGI(TAG, "PA config set.");
+
+  ESP_LOGI(TAG, "Setting TX params: power (%ddBm) ramp_time (0x%02X)...", cfg->tx_power, cfg->ramp_time);
+  ret = lora_cmd_set_tx_params(dev, cfg->tx_power, cfg->ramp_time);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set TX params: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "TX params set.");
 
   // SetTxParams
   // SetBufferBaseAddress
@@ -442,6 +454,18 @@ static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_PA_CONFIG, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t tx_power, uint8_t ramp_time)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[2] = {
+    (uint8_t)tx_power,
+    ramp_time,
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_TX_PARAMS, tx, sizeof(tx), NULL, 0);
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)

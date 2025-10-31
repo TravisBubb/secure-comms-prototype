@@ -26,6 +26,8 @@ typedef struct
   uint8_t duty_cycle;
   uint8_t hp_max;
   lora_device_type_t device_sel;
+  int8_t tx_power;
+  uint8_t ramp_time;
   spi_host_device_t spi_host;
   void (*irq_callback)(void *arg);
 } lora_config_t;
