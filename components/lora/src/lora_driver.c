@@ -8,8 +8,24 @@
 
 static const char *TAG = "LORA";
 
+typedef enum 
+{
+  LORA_IRQ_NONE = 0x0000, // no IRQ
+  LORA_IRQ_TX_DONE = 1 << 0,
+  LORA_IRQ_RX_DONE = 1 << 1,
+  LORA_IRQ_PREAMBLE_DETECTED = 1 << 2,
+  LORA_IRQ_SYNC_WORD_VALID = 1 << 3,
+  LORA_IRQ_HEADER_VALID = 1 << 4,
+  LORA_IRQ_HEADER_ERR = 1 << 5,
+  LORA_IRQ_CRC_ERR = 1 << 6,
+  LORA_IRQ_CAD_DONE = 1 << 7,
+  LORA_IRQ_CAD_DETECTED = 1 << 8,
+  LORA_IRQ_TIMEOUT = 1 << 9,
+} lora_irq_t;
+
 typedef enum
 {
+  LORA_CMD_SET_DIO_IRQ_PARAMS = 0x08,
   LORA_CMD_GET_PACKET_TYPE = 0x11,
   LORA_CMD_SET_STANDBY = 0x80,
   LORA_CMD_SET_RF_FREQUENCY = 0x86,
@@ -25,6 +41,7 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
 {
   switch (cmd)
   {
+  case LORA_CMD_SET_DIO_IRQ_PARAMS: return "SetDioIrqParams";
   case LORA_CMD_GET_PACKET_TYPE: return "GetPacketType";
   case LORA_CMD_SET_STANDBY: return "SetStandby";
   case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
@@ -110,6 +127,7 @@ static esp_err_t lora_cmd_set_pa_config(lora_t *dev, uint8_t duty_cycle, uint8_t
 static esp_err_t lora_cmd_set_tx_params(lora_t *dev, int8_t power, uint8_t ramp_time);
 static esp_err_t lora_cmd_set_buffer_base_address(lora_t *dev, uint8_t tx_addr, uint8_t rx_addr);
 static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t bw, uint8_t cr, uint8_t ldro);
+static esp_err_t lora_cmd_set_dio_irq_params(lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -156,12 +174,17 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
 
   ESP_LOGI(TAG, "Verifying LoRa packet type...");
   lora_packet_type_t pkt_type = -1;
-  ret = lora_cmd_get_packet_type(dev, &pkt_type);
-  if (ret != ESP_OK)
-  {
-    ESP_LOGE(TAG, "Failed to get LoRa packet type: %d.", ret);
-    return ret;
-  }
+  int retries = 5;
+  do {
+    ret = lora_cmd_get_packet_type(dev, &pkt_type);
+    if (ret != ESP_OK)
+    {
+      ESP_LOGE(TAG, "Failed to get LoRa packet type: %d.", ret);
+      return ret;
+    }
+    if (pkt_type == LORA_PACKET_TYPE_LORA) break;
+  } while (--retries);
+
   if (pkt_type != LORA_PACKET_TYPE_LORA)
   {
     ESP_LOGE(TAG,
@@ -217,7 +240,17 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   }
   ESP_LOGI(TAG, "Modulation params set.");
 
-  // SetDioIrqParams
+  uint16_t irq_mask = LORA_IRQ_TX_DONE | LORA_IRQ_RX_DONE | LORA_IRQ_TIMEOUT;
+  uint16_t dio1_mask = LORA_IRQ_TX_DONE | LORA_IRQ_RX_DONE;
+  ESP_LOGI(TAG, "Setting DIO IRQ params: irq_mask (0x%02X) dio1 (0x%02X) dio2 (0x%02X) dio3 (0x%02X)...", irq_mask, dio1_mask, LORA_IRQ_NONE, LORA_IRQ_NONE);
+  ret = lora_cmd_set_dio_irq_params(dev, irq_mask, dio1_mask, LORA_IRQ_NONE, LORA_IRQ_NONE);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set DIO IRQ params: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "DIO IRQ params set.");
+
   // WriteReg (sync word)
 
   return ESP_OK;
@@ -513,6 +546,24 @@ static esp_err_t lora_cmd_set_modulation_params(lora_t *dev, uint8_t sf, uint8_t
   };
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_MODULATION_PARAMS, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_dio_irq_params(lora_t *dev, uint16_t irq_mask, uint16_t dio1_mask, uint16_t dio2_mask, uint16_t dio3_mask)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[8] = {
+    (uint8_t)(irq_mask >> 8),
+    (uint8_t)(irq_mask >> 0),
+    (uint8_t)(dio1_mask >> 8),
+    (uint8_t)(dio1_mask >> 0),
+    (uint8_t)(dio2_mask >> 8),
+    (uint8_t)(dio2_mask >> 0),
+    (uint8_t)(dio3_mask >> 8),
+    (uint8_t)(dio3_mask >> 0),
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_DIO_IRQ_PARAMS, tx, sizeof(tx), NULL, 0);
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)
