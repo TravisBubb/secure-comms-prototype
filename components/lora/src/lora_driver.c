@@ -1,6 +1,7 @@
 #include "lora_driver.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include <string.h>
 
 #define LORA_READY_TIMEOUT_MS 100
@@ -8,6 +9,18 @@
 #define LORA_REG_SYNC_WORD_ADDR 0x0740u
 
 static const char *TAG = "LORA";
+
+static volatile bool tx_done_flag = false;
+static SemaphoreHandle_t tx_done_sem;
+
+void IRAM_ATTR dio1_isr_handler(void *arg)
+{
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  tx_done_flag = true;
+  esp_rom_printf("DIO1 ISR fired!\n");
+  xSemaphoreGiveFromISR(tx_done_sem, &xHigherPriorityTaskWoken);
+  if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+}
 
 typedef enum
 {
@@ -26,14 +39,19 @@ typedef enum
 
 typedef enum
 {
+  LORA_CMD_CLEAR_IRQ_STATUS = 0x02,
   LORA_CMD_SET_DIO_IRQ_PARAMS = 0x08,
   LORA_CMD_WRITE_REGISTER = 0x0D,
+  LORA_CMD_WRITE_BUFFER = 0x0E,
   LORA_CMD_GET_PACKET_TYPE = 0x11,
+  LORA_CMD_GET_IRQ_STATUS = 0x12,
   LORA_CMD_READ_REGISTER = 0x1D,
   LORA_CMD_SET_STANDBY = 0x80,
+  LORA_CMD_SET_TX = 0x83,
   LORA_CMD_SET_RF_FREQUENCY = 0x86,
   LORA_CMD_SET_PACKET_TYPE = 0x8A,
   LORA_CMD_SET_MODULATION_PARAMS = 0x8B,
+  LORA_CMD_SET_PACKET_PARAMS = 0x8C,
   LORA_CMD_SET_TX_PARAMS = 0x8E,
   LORA_CMD_SET_BUFFER_BASE_ADDRESS = 0x8F,
   LORA_CMD_SET_PA_CONFIG = 0x95,
@@ -44,14 +62,19 @@ static const char *lora_cmd_name(lora_cmd_t cmd)
 {
   switch (cmd)
   {
+  case LORA_CMD_CLEAR_IRQ_STATUS: return "ClearIrqStatus";
   case LORA_CMD_SET_DIO_IRQ_PARAMS: return "SetDioIrqParams";
   case LORA_CMD_WRITE_REGISTER: return "WriteRegister";
+  case LORA_CMD_WRITE_BUFFER: return "WriteBuffer";
   case LORA_CMD_GET_PACKET_TYPE: return "GetPacketType";
+  case LORA_CMD_GET_IRQ_STATUS: return "GetIrqStatus";
   case LORA_CMD_READ_REGISTER: return "ReadRegister";
   case LORA_CMD_SET_STANDBY: return "SetStandby";
+  case LORA_CMD_SET_TX: return "SetTx";
   case LORA_CMD_SET_RF_FREQUENCY: return "SetRfFrequency";
   case LORA_CMD_SET_PACKET_TYPE: return "SetPacketType";
   case LORA_CMD_SET_MODULATION_PARAMS: return "SetModulationParams";
+  case LORA_CMD_SET_PACKET_PARAMS: return "SetPacketParams";
   case LORA_CMD_SET_TX_PARAMS: return "SetTxParams";
   case LORA_CMD_SET_BUFFER_BASE_ADDRESS: return "SetBufferBaseAddress";
   case LORA_CMD_SET_PA_CONFIG: return "SetPaConfig";
@@ -128,7 +151,7 @@ static esp_err_t lora_spi_transfer_safe(lora_t *dev,
                                         size_t rx_len);
 static esp_err_t lora_wait_ready(lora_t *dev);
 static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *cmd_status);
-static esp_err_t lora_cmd_set_standby(lora_t *dev);
+static esp_err_t lora_cmd_set_standby(lora_t *dev, uint8_t mode);
 static esp_err_t lora_cmd_set_packet_type(lora_t *dev, lora_packet_type_t pkt_type);
 static esp_err_t lora_cmd_get_packet_type(lora_t *dev, lora_packet_type_t *pkt_type);
 static esp_err_t lora_cmd_set_rf_frequency(lora_t *dev, long frequency);
@@ -146,6 +169,18 @@ static esp_err_t
 lora_cmd_write_register(lora_t *dev, uint16_t addr, const uint8_t *data, size_t len);
 static esp_err_t lora_cmd_read_register(lora_t *dev, uint16_t addr, uint8_t *data, size_t len);
 static esp_err_t lora_cmd_set_syncword(lora_t *dev, uint16_t syncword);
+static esp_err_t
+lora_cmd_write_buffer(lora_t *dev, uint8_t offset, const uint8_t *data, size_t len);
+static esp_err_t lora_cmd_set_packet_params(lora_t *dev,
+                                            uint16_t preamble_len,
+                                            uint8_t header_type,
+                                            uint8_t payload_len,
+                                            uint8_t crc,
+                                            uint8_t invert_iq);
+static esp_err_t lora_cmd_set_tx(lora_t *dev, uint32_t timeout);
+static esp_err_t lora_wait_for_tx_done(lora_t *dev, uint32_t timeout_ms);
+static esp_err_t lora_cmd_get_irq_status(lora_t *dev, uint16_t *irq);
+static esp_err_t lora_cmd_clear_irq_status(lora_t *dev, uint16_t mask);
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status);
 
 esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
@@ -154,7 +189,47 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
 
   esp_err_t ret;
 
+  if (cfg->reset >= 0)
+  {
+    gpio_set_direction(cfg->reset, GPIO_MODE_OUTPUT);
+    gpio_set_level(cfg->reset, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(cfg->reset, 1);
+    vTaskDelay(pdMS_TO_TICKS(10)); // give it time to boot
+    // extra wait for oscillator if needed
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+
   vTaskDelay(pdMS_TO_TICKS(50));
+
+  tx_done_sem = xSemaphoreCreateBinary();
+  gpio_config_t dio_cfg = {
+      .pin_bit_mask = 1ULL << cfg->dio1,
+      .mode = GPIO_MODE_INPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_PULLDOWN_DISABLE,
+      .intr_type = GPIO_INTR_POSEDGE,
+  };
+
+  ret = gpio_config(&dio_cfg);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to configure DIO1 pin: %d.", ret);
+    return ret;
+  }
+
+  ret = gpio_install_isr_service(0);
+  if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE)
+  {
+    ESP_LOGE(TAG, "gpio_install_isr_service failed: %d", ret);
+    return ret;
+  }
+  ret = gpio_isr_handler_add(cfg->dio1, dio1_isr_handler, NULL);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "gpio_isr_handler_add failed: %d", ret);
+    return ret;
+  }
 
   dev->spi_mutex = xSemaphoreCreateMutex();
   if (!dev->spi_mutex)
@@ -173,7 +248,7 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
   lora_print_status(chip_mode, cmd_status);
 
   ESP_LOGI(TAG, "Setting LoRa to standby mode...");
-  ret = lora_cmd_set_standby(dev);
+  ret = lora_cmd_set_standby(dev, 0x00);
   if (ret != ESP_OK)
   {
     ESP_LOGE(TAG, "Failed to set LoRa to standby mode: %d.", ret);
@@ -277,6 +352,7 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
            dio1_mask,
            LORA_IRQ_NONE,
            LORA_IRQ_NONE);
+  lora_cmd_clear_irq_status(dev, 0xFFFF);
   ret = lora_cmd_set_dio_irq_params(dev, irq_mask, dio1_mask, LORA_IRQ_NONE, LORA_IRQ_NONE);
   if (ret != ESP_OK)
   {
@@ -310,6 +386,89 @@ esp_err_t lora_init(lora_t *dev, const lora_config_t *cfg)
     return ESP_FAIL;
   }
   ESP_LOGI(TAG, "Syncword verified (0x%02X).", syncword);
+
+  return ESP_OK;
+}
+
+esp_err_t lora_send(lora_t *dev, const uint8_t *data, size_t len)
+{
+  if (!dev || !data || len == 0) return ESP_ERR_INVALID_ARG;
+
+  esp_err_t ret;
+
+  ESP_LOGI(TAG, "Beginning TX sequence...");
+
+  ESP_LOGI(TAG, "Writing payload to TX buffer...");
+  ret = lora_cmd_write_buffer(dev, 0x00, data, len);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to write payload to TX buffer: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "Payload has been written to TX buffer.");
+
+  ESP_LOGI(TAG, "Setting packet params...");
+  ret = lora_cmd_set_packet_params(dev,
+                                   8,    // preamble
+                                   0x00, // variable length
+                                   len,
+                                   0x01,  // CRC on
+                                   0x00); // standard IQ
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set packet params: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "Packet params have been set.");
+
+  ESP_LOGI(TAG, "Setting TX mode...");
+  uint32_t timeout_ms = 5000;
+  ret = lora_cmd_set_tx(dev, timeout_ms);
+  if (ret != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to set TX mode: %d.", ret);
+    return ret;
+  }
+  ESP_LOGI(TAG, "TX set.");
+
+  uint8_t chip_mode = 0, cmd_status = 0;
+  if (lora_cmd_get_status(dev, &chip_mode, &cmd_status) == ESP_OK) {
+    lora_print_status(chip_mode, cmd_status);
+  } else {
+    ESP_LOGE(TAG, "Failed to GET_STATUS after SetTx");
+  }
+
+  uint16_t irq = 0;
+  if (lora_cmd_get_irq_status(dev, &irq) == ESP_OK) {
+    ESP_LOGI(TAG, "IRQ status after SetTx: 0x%04X", irq);
+  } else {
+    ESP_LOGE(TAG, "Failed to GET_IRQ_STATUS after SetTx");
+  }
+
+  // Clear them so a subsequent attempt is clean
+  lora_cmd_clear_irq_status(dev, 0xFFFF);
+
+  if (xSemaphoreTake(tx_done_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE)
+  {
+    if (tx_done_flag)
+    {
+      tx_done_flag = false; // reset
+      ESP_LOGI("LORA_ISR", "TX_DONE fired!");
+    }
+  }
+  else
+  {
+    ESP_LOGE("LORA_ISR", "TX timeout!");
+  }
+
+  // ESP_LOGI(TAG, "Waiting for TX_DONE IRQ.");
+  // ret = lora_wait_for_tx_done(dev, 500);
+  // if (ret != ESP_OK)
+  // {
+  //   ESP_LOGE(TAG, "Error while waiting for TX_DONE: %d.", ret);
+  //   return ret;
+  // }
+  // ESP_LOGI(TAG, "Transmission completed successfully.");
 
   return ESP_OK;
 }
@@ -468,38 +627,69 @@ static esp_err_t lora_spi_transfer_safe(lora_t *dev,
 
 static esp_err_t lora_wait_ready(lora_t *dev)
 {
+  vTaskDelay(pdMS_TO_TICKS(100));
+  return ESP_OK;
+
   if (!dev) return ESP_ERR_INVALID_ARG;
 
-  uint32_t elapsed = 0;
-  while (gpio_get_level(dev->cfg.busy) == 1)
+  // Quick probe: read BUSY once and log it to confirm polarity
+  int level = gpio_get_level(dev->cfg.busy);
+  ESP_LOGI(TAG, "BUSY level=%d (expect 1 while busy for normal boards)", level);
+
+  unsigned int elapsed = 0;
+  while (gpio_get_level(dev->cfg.busy) == 1) // keep your existing logic, but watch the logs
   {
     if (elapsed >= LORA_READY_TIMEOUT_MS)
     {
-      ESP_LOGE(TAG, "Timeout waiting for BUSY pin to clear");
+      ESP_LOGE(TAG, "Timeout waiting for BUSY pin to clear (elapsed=%u ms)", elapsed);
       return ESP_ERR_TIMEOUT;
     }
-
     vTaskDelay(pdMS_TO_TICKS(LORA_READY_POLL_INTERVAL_MS));
     elapsed += LORA_READY_POLL_INTERVAL_MS;
   }
-
   return ESP_OK;
 }
 
+// static esp_err_t lora_wait_ready(lora_t *dev)
+// {
+//   if (!dev) return ESP_ERR_INVALID_ARG;
+
+//   uint32_t elapsed = 0;
+//   while (gpio_get_level(dev->cfg.busy) == 1)
+//   {
+//     if (elapsed >= LORA_READY_TIMEOUT_MS)
+//     {
+//       ESP_LOGE(TAG, "Timeout waiting for BUSY pin to clear");
+//       return ESP_ERR_TIMEOUT;
+//     }
+
+//     vTaskDelay(pdMS_TO_TICKS(LORA_READY_POLL_INTERVAL_MS));
+//     elapsed += LORA_READY_POLL_INTERVAL_MS;
+//   }
+
+//   return ESP_OK;
+// }
+
 static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *cmd_status)
 {
-  if (!dev || !dev->spi_mutex) return ESP_ERR_INVALID_ARG;
+  if (!dev) return ESP_ERR_INVALID_ARG;
 
   esp_err_t ret;
-  uint8_t status = 0;
+  uint8_t tx_buf[1] = {LORA_CMD_GET_STATUS};
+  uint8_t rx_buf[1] = {0};
 
   if (xSemaphoreTake(dev->spi_mutex, pdMS_TO_TICKS(10)) != pdTRUE) return ESP_ERR_TIMEOUT;
 
-  ret = lora_spi_transfer(dev, LORA_CMD_GET_STATUS, NULL, 0, &status, 1);
+  spi_transaction_t t = {0};
+  t.length = 8; // 1 byte
+  t.tx_buffer = tx_buf;
+  t.rx_buffer = rx_buf;
 
+  ret = spi_device_transmit(dev->spi_handle, &t);
   xSemaphoreGive(dev->spi_mutex);
-
   if (ret != ESP_OK) return ret;
+
+  uint8_t status = rx_buf[0];
 
   if (chip_mode) *chip_mode = (status >> 4) & 0x07;
   if (cmd_status) *cmd_status = (status >> 1) & 0x07;
@@ -507,11 +697,11 @@ static esp_err_t lora_cmd_get_status(lora_t *dev, uint8_t *chip_mode, uint8_t *c
   return ESP_OK;
 }
 
-static esp_err_t lora_cmd_set_standby(lora_t *dev)
+static esp_err_t lora_cmd_set_standby(lora_t *dev, uint8_t mode)
 {
   if (!dev) return ESP_ERR_INVALID_ARG;
 
-  uint8_t tx[1] = {0x00}; // STDBY_RC
+  uint8_t tx[1] = {mode};
 
   return lora_spi_transfer_safe(dev, LORA_CMD_SET_STANDBY, tx, 1, NULL, 0);
 }
@@ -664,6 +854,90 @@ static esp_err_t lora_cmd_set_syncword(lora_t *dev, uint16_t syncword)
   uint8_t buf[2] = {(uint8_t)(syncword >> 8), (uint8_t)(syncword & 0xFF)};
 
   return lora_cmd_write_register(dev, LORA_REG_SYNC_WORD_ADDR, buf, sizeof(buf));
+}
+
+static esp_err_t lora_cmd_write_buffer(lora_t *dev, uint8_t offset, const uint8_t *data, size_t len)
+{
+  if (!dev || !data || len == 0) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[1 + len];
+  tx[0] = offset;
+  memcpy(&tx[1], data, len);
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_WRITE_BUFFER, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_packet_params(lora_t *dev,
+                                            uint16_t preamble_len,
+                                            uint8_t header_type,
+                                            uint8_t payload_len,
+                                            uint8_t crc,
+                                            uint8_t invert_iq)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[6] = {
+      (uint8_t)(preamble_len >> 8),
+      (uint8_t)(preamble_len & 0xFF),
+      header_type,
+      payload_len,
+      crc,
+      invert_iq,
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_PACKET_PARAMS, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_cmd_set_tx(lora_t *dev, uint32_t timeout)
+{
+  if (!dev) return ESP_ERR_INVALID_ARG;
+
+  uint8_t tx[3] = {
+      (uint8_t)((timeout >> 16) & 0xFF),
+      (uint8_t)((timeout >> 8) & 0xFF),
+      (uint8_t)(timeout & 0xFF),
+  };
+
+  return lora_spi_transfer_safe(dev, LORA_CMD_SET_TX, tx, sizeof(tx), NULL, 0);
+}
+
+static esp_err_t lora_wait_for_tx_done(lora_t *dev, uint32_t timeout_ms)
+{
+  uint16_t irq;
+  uint32_t start = esp_log_timestamp();
+
+  while (esp_log_timestamp() - start < timeout_ms)
+  {
+    esp_err_t ret = lora_cmd_get_irq_status(dev, &irq);
+    if (ret != ESP_OK) return ret;
+
+    if (irq & 0x0001)
+    {
+      ESP_LOGI(TAG, "TX_DONE detected!");
+      lora_cmd_clear_irq_status(dev, irq);
+      return ESP_OK;
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+
+  ESP_LOGE(TAG, "TX timed out waiting for TX_DONE");
+  return ESP_ERR_TIMEOUT;
+}
+
+static esp_err_t lora_cmd_get_irq_status(lora_t *dev, uint16_t *irq)
+{
+  uint8_t rx[4];
+  esp_err_t ret = lora_spi_transfer_safe(dev, LORA_CMD_GET_IRQ_STATUS, NULL, 0, rx, sizeof(rx));
+  if (ret != ESP_OK) return ret;
+
+  *irq = ((uint16_t)rx[2] << 8) | rx[3];
+  return ESP_OK;
+}
+
+static esp_err_t lora_cmd_clear_irq_status(lora_t *dev, uint16_t mask)
+{
+  uint8_t tx[2] = {(uint8_t)(mask >> 8), (uint8_t)(mask & 0xFF)};
+  return lora_spi_transfer_safe(dev, LORA_CMD_CLEAR_IRQ_STATUS, tx, sizeof(tx), NULL, 0);
 }
 
 static void lora_print_status(uint8_t chip_mode, uint8_t cmd_status)
