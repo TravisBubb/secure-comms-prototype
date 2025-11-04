@@ -25,7 +25,7 @@ void Shell::loop(void)
         dispatch(_lineBuffer);
         _lineIdx = 0;
       }
-      Serial.print("> ");
+      Serial.print("\n> ");
     }
     else if (c >= 0x20 && c <= 0x7E)
     {
