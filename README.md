@@ -29,7 +29,6 @@ This project uses a **Heltec WiFi LoRa 32 V3** development board and an **extern
 - PlatformIO (recommended) or Arduino IDE
 - Libraries:
   - [RadioLib](https://github.com/jgromes/RadioLib) (v7.4.0)
-  - [EspSoftwareSerial](https://github.com/plerup/espsoftwareserial) (v8.2.0)
 - PlatformIO board: `heltec_wifi_lora_32_V3`
 
 ## Building the Code
