@@ -1,7 +1,4 @@
-build/
-sdkconfig
-sdkconfig.old
+.pio/
 .vscode/
-compile_commands.json
+.devbox/
 .cache/
-managed_components/
