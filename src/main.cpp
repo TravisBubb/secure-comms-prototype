@@ -1,11 +1,18 @@
 #include "Shell.h"
 #include "heltec_wifi_lora_v3.h"
+#include "radio.h"
 #include <Arduino.h>
-#include <RadioLib.h>
+#include <string.h>
 
-SPIClass spiLoRa(HSPI);
-SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUSY, spiLoRa);
 Shell shell;
+GpioConfig gpioCfg = {.misoPin = PIN_LORA_MISO,
+                      .mosiPin = PIN_LORA_MOSI,
+                      .nssPin = PIN_LORA_NSS,
+                      .sckPin = PIN_LORA_SCK,
+                      .dio1Pin = PIN_LORA_DIO1,
+                      .rstPin = PIN_LORA_RST,
+                      .busyPin = PIN_LORA_BUSY};
+Radio r(gpioCfg, RadioConfig::defaultConfig());
 
 void ping(uint8_t argc, char *argv[])
 {
@@ -74,7 +81,9 @@ void send(uint8_t argc, char *argv[])
     return;
   }
 
-  int state = radio.transmit(message);
+  Packet pkt = {.destId = 0x1234, .payloadLen = strlen(message)};
+  memcpy(&pkt.payload, message, pkt.payloadLen);
+  int state = r.transmit(pkt);
   if (state == RADIOLIB_ERR_NONE) { Serial.printf("\n[info] Sent message: \"%s\"\n", message); }
   else
   {
@@ -84,16 +93,14 @@ void send(uint8_t argc, char *argv[])
 
 void receive(uint8_t argc, char *argv[])
 {
-  uint8_t buffer[128];
-
-  int state = radio.receive(buffer, 128, 10000);
+  Packet pkt;
+  int state = r.receive(pkt, 10000);
   if (state == RADIOLIB_ERR_NONE)
   {
-    size_t len = radio.getPacketLength();
-    if (len >= sizeof(buffer)) len = sizeof(buffer) - 1;
-    buffer[len] = '\0';
-
-    Serial.printf("\n[info] Received message: %s\n", (const char *)buffer);
+    char text[200];
+    memcpy(text, pkt.payload, pkt.payloadLen);
+    text[pkt.payloadLen] = '\0';
+    Serial.printf("\n[info] Received message: %s\n", text);
   }
   else if (state == RADIOLIB_ERR_RX_TIMEOUT)
   {
@@ -110,33 +117,23 @@ void setup()
 {
   Serial.begin(115200);
   delay(1);
-  Serial.println("USB Serial interface initialized.");
+  Serial.println("[Init] USB Serial interface initialized.");
 
   shell.registerCommand("ping", ping);
   shell.registerCommand("rcv", receive);
   shell.registerCommand("send", send);
 
-  Serial.println("Initializing SPI...");
-  spiLoRa.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
-  Serial.println("SPI initialized.");
-
-  Serial.println("Initializing SX1262...");
-  int state = radio.begin(LORA_FREQUENCY_MHZ,
-                          LORA_BANDWIDTH_KHZ,
-                          LORA_SPREADING_FACTOR,
-                          LORA_CODING_RATE_DENOMINATOR,
-                          LORA_SYNCWORD,
-                          LORA_POWER_DBM,
-                          LORA_PREAMBLE_LENGTH);
+  Serial.println("[Init] Initializing SX1262...");
+  int state = r.begin();
   if (state != RADIOLIB_ERR_NONE)
   {
-    Serial.print("SX1262 initialization failed, code: ");
+    Serial.print("[Init] SX1262 initialization failed, code: ");
     Serial.println(state);
     while (true) {}
   }
 
-  Serial.println("SX1262 initialized.");
-
+  Serial.println("[Init] SX1262 initialized.");
+  delay(100);
   Serial.print("> ");
 }
 
