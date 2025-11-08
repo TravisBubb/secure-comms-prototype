@@ -1,5 +1,7 @@
 # Secure Comms Prototype
 
+[![CI](https://github.com/TravisBubb/secure-comms-prototype/actions/workflows/run-unit-tests.yml/badge.svg?branch=main)](https://github.com/TravisBubb/secure-comms-prototype/actions/workflows/run-unit-tests.yml/)
+
 > ⚠️ Work in Progress — this repository is an active development effort and is not yet stable. Expect rapid iteration, breaking changes, and incomplete functionality.
 
 ## Hardware Setup
