@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_PAYLOAD_LEN 200
+#define MAX_FRAME_PAYLOAD_LEN 200
 
 struct Frame
 {
@@ -12,8 +12,8 @@ struct Frame
   uint8_t flags;
   uint16_t dev_id;
   uint32_t seq;
-  uint8_t payload_len;
-  uint8_t payload[MAX_PAYLOAD_LEN];
+  uint8_t payloadLen;
+  uint8_t payload[MAX_FRAME_PAYLOAD_LEN];
   uint8_t auth_tag[16];
   uint16_t crc;
 };

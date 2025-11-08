@@ -12,6 +12,7 @@ GpioConfig gpioCfg = {.misoPin = PIN_LORA_MISO,
                       .dio1Pin = PIN_LORA_DIO1,
                       .rstPin = PIN_LORA_RST,
                       .busyPin = PIN_LORA_BUSY};
+
 Radio r(gpioCfg, RadioConfig::defaultConfig());
 
 void ping(uint8_t argc, char *argv[])

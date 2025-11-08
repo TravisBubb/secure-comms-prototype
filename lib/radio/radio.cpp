@@ -1,13 +1,24 @@
 #include "radio.h"
 #include "frame.h"
-#include <Arduino.h>
-#include <RadioLib.h>
 #include <string.h>
 
+#ifndef UNIT_TEST
+#include <Arduino.h>
+#include <RadioLib.h>
+#endif
+
+#ifdef UNIT_TEST
+SerialMock Serial;
+#endif
+
 Radio::Radio(const GpioConfig &gpioCfg, const RadioConfig &radioCfg)
-    : _gpioCfg(gpioCfg), _radioCfg(radioCfg), _spi(HSPI),
-      _module(gpioCfg.nssPin, gpioCfg.dio1Pin, gpioCfg.rstPin, gpioCfg.busyPin, _spi),
+    : _gpioCfg(gpioCfg), _radioCfg(radioCfg),
+#ifdef UNIT_TEST
+      _spi(), _module(), _radio(&_module)
+#else
+      _spi(HSPI), _module(gpioCfg.nssPin, gpioCfg.dio1Pin, gpioCfg.rstPin, gpioCfg.busyPin, _spi),
       _radio(&_module)
+#endif
 {
 }
 
