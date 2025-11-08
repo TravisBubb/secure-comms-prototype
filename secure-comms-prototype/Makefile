@@ -5,7 +5,13 @@ PIO = pio
 CLANG_FORMAT = clang-format
 
 build:
-	@${PIO} run
+	@${PIO} run -e ${BOARD}
+
+test:
+	@${PIO} test -e native
+
+test-hw:
+	@${PIO} test -e ${BOARD}
 
 upload:
 	@echo "Uploading to BOARD=${BOARD} on PORT=${PORT}..."
@@ -23,4 +29,4 @@ format:
 	@${CLANG_FORMAT} -i **/*.cpp **/*.h
 	@echo "Formatting complete."
 
-.PHONY: build upload monitor upload-and-monitor format
+.PHONY: build test test-hw upload monitor upload-and-monitor format
