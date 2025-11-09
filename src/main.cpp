@@ -1,28 +1,31 @@
 #include "Shell.h"
 #include "heltec_wifi_lora_v3.h"
+#include "in_memory_storage.h"
 #include "securelink.h"
 #include <Arduino.h>
 #include <string.h>
 
 Shell shell;
-SecureLink secureLink(SecureLinkConfig{.gpio = {.misoPin = PIN_LORA_MISO,
-                                                .mosiPin = PIN_LORA_MOSI,
-                                                .nssPin = PIN_LORA_NSS,
-                                                .sckPin = PIN_LORA_SCK,
-                                                .dio1Pin = PIN_LORA_DIO1,
-                                                .rstPin = PIN_LORA_RST,
-                                                .busyPin = PIN_LORA_BUSY},
-                                       .radio =
-                                           {
-                                               .freqHz = 915000000,
-                                               .bwHz = 125000,
-                                               .sf = 7,
-                                               .crDen = 5,
-                                               .syncWord = 0x12,
-                                               .powerDbm = 10,
-                                               .preambleLen = 8,
-                                           },
-                                       .dll = {.enableFragmentation = true}});
+InMemoryStorage storage(0x1234);
+SecureLink<InMemoryStorage> secureLink(SecureLinkConfig{.gpio = {.misoPin = PIN_LORA_MISO,
+                                                                 .mosiPin = PIN_LORA_MOSI,
+                                                                 .nssPin = PIN_LORA_NSS,
+                                                                 .sckPin = PIN_LORA_SCK,
+                                                                 .dio1Pin = PIN_LORA_DIO1,
+                                                                 .rstPin = PIN_LORA_RST,
+                                                                 .busyPin = PIN_LORA_BUSY},
+                                                        .radio =
+                                                            {
+                                                                .freqHz = 915000000,
+                                                                .bwHz = 125000,
+                                                                .sf = 7,
+                                                                .crDen = 5,
+                                                                .syncWord = 0x12,
+                                                                .powerDbm = 10,
+                                                                .preambleLen = 8,
+                                                            },
+                                                        .dll = {.enableFragmentation = true}},
+                                       storage);
 
 void ping(uint8_t argc, char *argv[])
 {

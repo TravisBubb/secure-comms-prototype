@@ -87,9 +87,6 @@ private:
   Module _module;
   SX1262 _radio;
 #endif
-
-  uint32_t _seq;
-  uint16_t _devId;
 };
 
 #endif // RADIO_H

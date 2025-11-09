@@ -70,17 +70,51 @@ int Radio::begin(void)
 int Radio::transmit(const uint8_t *data, size_t len)
 {
   if (!data || len == 0) return -1;
-  return _radio.transmit(data, len);
+  int state = _radio.transmit(data, len);
+  if (state != 0) return state;
+
+  Serial.println("Sent bytes:");
+  for (int i = 0; i < len; ++i)
+    Serial.printf("0x%02X ", data[i]);
+  Serial.println();
+
+  return 0;
 }
 
 int Radio::receive(uint8_t *out, size_t *len)
 {
   if (!out || !len || *len == 0) return -1;
-  return _radio.receive(out, *len);
+
+  int state = _radio.receive(out, *len);
+  if (state != 0) return state;
+
+  size_t rcvLen = _radio.getPacketLength();
+
+  Serial.println("Received bytes:");
+  for (int i = 0; i < rcvLen; ++i)
+    Serial.printf("0x%02X ", out[i]);
+  Serial.println();
+
+  *len = rcvLen;
+
+  return 0;
 }
 
 int Radio::receive(uint8_t *out, size_t *len, uint32_t timeoutMs)
 {
   if (!out || !len || *len == 0) return -1;
-  return _radio.receive(out, *len, timeoutMs);
+
+  int state =  _radio.receive(out, *len, timeoutMs);
+  if (state != 0) return state;
+
+  size_t rcvLen = _radio.getPacketLength();
+
+  Serial.println("Received bytes:");
+  for (int i = 0; i < rcvLen; ++i)
+    Serial.printf("0x%02X ", out[i]);
+  Serial.println();
+
+  *len = rcvLen;
+
+  return 0;
 }
