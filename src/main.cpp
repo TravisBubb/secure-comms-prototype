@@ -1,19 +1,28 @@
 #include "Shell.h"
 #include "heltec_wifi_lora_v3.h"
-#include "radio.h"
+#include "securelink.h"
 #include <Arduino.h>
 #include <string.h>
 
 Shell shell;
-GpioConfig gpioCfg = {.misoPin = PIN_LORA_MISO,
-                      .mosiPin = PIN_LORA_MOSI,
-                      .nssPin = PIN_LORA_NSS,
-                      .sckPin = PIN_LORA_SCK,
-                      .dio1Pin = PIN_LORA_DIO1,
-                      .rstPin = PIN_LORA_RST,
-                      .busyPin = PIN_LORA_BUSY};
-
-Radio r(gpioCfg, RadioConfig::defaultConfig());
+SecureLink secureLink(SecureLinkConfig{.gpio = {.misoPin = PIN_LORA_MISO,
+                                          .mosiPin = PIN_LORA_MOSI,
+                                          .nssPin = PIN_LORA_NSS,
+                                          .sckPin = PIN_LORA_SCK,
+                                          .dio1Pin = PIN_LORA_DIO1,
+                                          .rstPin = PIN_LORA_RST,
+                                          .busyPin = PIN_LORA_BUSY},
+                                 .radio =
+                                     {
+                                         .freqHz = 915000000,
+                                         .bwHz = 125000,
+                                         .sf = 7,
+                                         .crDen = 5,
+                                         .syncWord = 0x12,
+                                         .powerDbm = 10,
+                                         .preambleLen = 8,
+                                     },
+                                 .dll = {.enableCrc = true, .enableFragmentation = true}});
 
 void ping(uint8_t argc, char *argv[])
 {
@@ -84,7 +93,7 @@ void send(uint8_t argc, char *argv[])
 
   Packet pkt = {.destId = 0x1234, .payloadLen = strlen(message)};
   memcpy(&pkt.payload, message, pkt.payloadLen);
-  int state = r.transmit(pkt);
+  int state = secureLink.send(pkt);
   if (state == RADIOLIB_ERR_NONE) { Serial.printf("\n[info] Sent message: \"%s\"\n", message); }
   else
   {
@@ -95,7 +104,7 @@ void send(uint8_t argc, char *argv[])
 void receive(uint8_t argc, char *argv[])
 {
   Packet pkt;
-  int state = r.receive(pkt, 10000);
+  int state = secureLink.receive(pkt, 10000);
   if (state == RADIOLIB_ERR_NONE)
   {
     char text[200];
@@ -125,7 +134,7 @@ void setup()
   shell.registerCommand("send", send);
 
   Serial.println("[Init] Initializing SX1262...");
-  int state = r.begin();
+  int state = secureLink.begin();
   if (state != RADIOLIB_ERR_NONE)
   {
     Serial.print("[Init] SX1262 initialization failed, code: ");
