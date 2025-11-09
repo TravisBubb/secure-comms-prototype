@@ -13,10 +13,10 @@ struct DataLinkConfig
 class DataLink
 {
 public:
-  explicit DataLink(Radio &radio, const DataLinkConfig &cfg = {});
+  explicit DataLink(Radio &radio, const DataLinkConfig &cfg);
 
   int begin(void);
-  int send(const Frame &frame);
+  int send(Frame &frame);
   int receive(Frame &frame);
   int receive(Frame &frame, uint32_t timeoutMs);
 
