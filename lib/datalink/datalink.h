@@ -37,7 +37,6 @@ public:
     // TODO: properly handle flags based on config (see docs/packets.md for specification)
     frame.flags = 0x00;
 
-    // TODO: properly generate these values
     frame.dev_id = _devId;
     frame.seq = _seq;
 
@@ -47,7 +46,8 @@ public:
     size_t len;
     if (!frame_serialize(frame, buf, &len)) return -1;
 
-    // TODO: increment seq
+    // TODO: if seq is at max value, require a re-key before rolling over to prevent replay attacks
+    _seq++;
 
     return _radio.transmit(buf, len);
   }
