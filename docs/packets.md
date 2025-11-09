@@ -21,7 +21,6 @@
 - `PayloadLen` (1 byte): length of encrypted payload (0-200; ensure < LoRa payload limit).
 - `EncryptedPayload` (variable): AES-GCM ciphertext of the application payload (encrypted with AAD above).
 - `AuthTag` (16 bytes): AES-GCM tag.
-- `CRC16`: CRC over the header + payload.
 
 ## Nonce Construction
 

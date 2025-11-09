@@ -6,7 +6,6 @@
 
 struct DataLinkConfig
 {
-  bool enableCrc;
   bool enableFragmentation;
 };
 

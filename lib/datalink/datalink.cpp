@@ -20,12 +20,6 @@ int DataLink::send(Frame &frame)
 
   // TODO: handle fragmentation
 
-  // TODO: generate real CRC
-  if (_cfg.enableCrc)
-    frame.crc = 0x1234;
-  else
-    frame.crc = 0xFFFF; // TODO: handle when CRC disabled
-
     uint8_t buf[sizeof(Frame)];
     size_t len;
     if (!frame_serialize(frame, buf, &len)) return -1;
@@ -49,8 +43,6 @@ int DataLink::receive(Frame &frame, uint32_t timeoutMs)
   if (!frame_deserialize(frame, buf, len)) return -1;
 
   // TODO: handle fragmentation & reassembly
-
-  // TODO: validate CRC
 
   // TODO: check flags to see if an ACK should be sent back
 
