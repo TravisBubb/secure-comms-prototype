@@ -14,7 +14,7 @@ struct Frame
   uint32_t seq;
   uint8_t payloadLen;
   uint8_t payload[MAX_FRAME_PAYLOAD_LEN];
-  uint8_t auth_tag[16];
+  uint8_t authTag[16];
   uint16_t crc;
 };
 

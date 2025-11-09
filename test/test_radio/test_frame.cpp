@@ -17,12 +17,12 @@ void test_frame_reset_defaults()
   TEST_ASSERT_EQUAL_UINT32(0, f.seq);
   TEST_ASSERT_EQUAL_UINT8(0, f.payloadLen);
 
-  // Verify payload and auth_tag are all zeroed
+  // Verify payload and authTag are all zeroed
   for (int i = 0; i < MAX_FRAME_PAYLOAD_LEN; ++i)
     TEST_ASSERT_EQUAL_UINT8(0, f.payload[i]);
 
   for (int i = 0; i < 16; ++i)
-    TEST_ASSERT_EQUAL_UINT8(0, f.auth_tag[i]);
+    TEST_ASSERT_EQUAL_UINT8(0, f.authTag[i]);
 
   TEST_ASSERT_EQUAL_UINT16(0, f.crc);
 }
@@ -37,7 +37,7 @@ void test_frame_serialize_deserialize()
   f.payloadLen = 2;
   f.payload[0] = 0x11;
   f.payload[1] = 0x22;
-  memset(f.auth_tag, 0x77, sizeof(f.auth_tag));
+  memset(f.authTag, 0x77, sizeof(f.authTag));
   f.crc = 0xBEEF;
 
   uint8_t buf[256];
@@ -59,7 +59,7 @@ void test_frame_serialize_empty_payload()
   size_t len;
 
   TEST_ASSERT_TRUE(frame_serialize(f, buffer, &len));
-  TEST_ASSERT_EQUAL_UINT8(9 + 16 + 2, len); // 9 header + 16 auth_tag + 2 crc
+  TEST_ASSERT_EQUAL_UINT8(9 + 16 + 2, len); // 9 header + 16 authTag + 2 crc
 }
 
 void test_frame_serialize_max_payload()
@@ -69,7 +69,7 @@ void test_frame_serialize_max_payload()
   f.payloadLen = MAX_FRAME_PAYLOAD_LEN;
   for (int i = 0; i < MAX_FRAME_PAYLOAD_LEN; ++i)
     f.payload[i] = (uint8_t)i;
-  memset(f.auth_tag, 0xAA, sizeof(f.auth_tag));
+  memset(f.authTag, 0xAA, sizeof(f.authTag));
   f.crc = 0x1234;
 
   uint8_t buf[1024];
@@ -160,7 +160,7 @@ void test_frame_fuzz_roundtrip()
     for (int j = 0; j < f.payloadLen; ++j)
       f.payload[j] = rand() & 0xFF;
     for (int j = 0; j < 16; ++j)
-      f.auth_tag[j] = rand() & 0xFF;
+      f.authTag[j] = rand() & 0xFF;
     f.crc = rand() & 0xFFFF;
 
     uint8_t buf[512];

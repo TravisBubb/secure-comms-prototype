@@ -19,13 +19,13 @@ bool frame_serialize(const Frame &frame, uint8_t *out, size_t *len)
   memcpy(&out[9], frame.payload, frame.payloadLen);
 
   // Auth tag (16 bytes)
-  memcpy(&out[frame.payloadLen + 9], frame.auth_tag, sizeof(frame.auth_tag));
+  memcpy(&out[frame.payloadLen + 9], frame.authTag, sizeof(frame.authTag));
 
   // CRC (2 bytes)
-  size_t crc_start = frame.payloadLen + 9 + sizeof(frame.auth_tag);
+  size_t crc_start = frame.payloadLen + 9 + sizeof(frame.authTag);
   write_u16_be(frame.crc, &out[crc_start]);
 
-  *len = 9 + frame.payloadLen + sizeof(frame.auth_tag) + 2;
+  *len = 9 + frame.payloadLen + sizeof(frame.authTag) + 2;
 
   return true;
 }
@@ -36,7 +36,7 @@ bool frame_deserialize(Frame &frame, const uint8_t *data, size_t len)
 
   frame.payloadLen = data[8];
 
-  size_t expected = 9 + frame.payloadLen + sizeof(frame.auth_tag) + 2;
+  size_t expected = 9 + frame.payloadLen + sizeof(frame.authTag) + 2;
   if (len < expected || frame.payloadLen > MAX_FRAME_PAYLOAD_LEN) return false;
 
   frame_reset(frame);
@@ -54,10 +54,10 @@ bool frame_deserialize(Frame &frame, const uint8_t *data, size_t len)
   memcpy(frame.payload, &data[9], frame.payloadLen);
 
   // Auth tag (16 bytes)
-  memcpy(frame.auth_tag, &data[9 + frame.payloadLen], sizeof(frame.auth_tag));
+  memcpy(frame.authTag, &data[9 + frame.payloadLen], sizeof(frame.authTag));
 
   // CRC (2 bytes)
-  size_t crc_start = frame.payloadLen + 9 + sizeof(frame.auth_tag);
+  size_t crc_start = frame.payloadLen + 9 + sizeof(frame.authTag);
   frame.crc = read_u16_be(&data[crc_start]);
 
   return true;
