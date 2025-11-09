@@ -67,80 +67,20 @@ int Radio::begin(void)
   return -1;
 }
 
-int Radio::transmit(const Packet &pkt)
+int Radio::transmit(const uint8_t *data, size_t len)
 {
-  Frame f;
-
-  f.ver = 0x01;
-  f.flags = 0x00; // TODO properly handle flags (see docs/packets.md for specification)
-  f.dev_id = _devId;
-  f.seq = _seq; // TODO generate unique seq
-
-  // TODO: add fragmentation logic here if pkt.payload_len > MAX_PAYLOAD_LEN (200)
-  if (pkt.payloadLen > MAX_FRAME_PAYLOAD_LEN) return -1;
-  f.payloadLen = pkt.payloadLen;
-
-  // TODO: encrypt the payload here
-
-  memcpy(&f.payload, pkt.payload, pkt.payloadLen);
-
-  // TODO: set real auth tag here
-  memset(&f.auth_tag, 0xFF, 16);
-
-  // TODO: calculate real CRC16
-  f.crc = 0x1234;
-
-  uint8_t buf[sizeof(Frame)];
-  size_t len;
-  if (!frame_serialize(f, buf, &len)) return -1;
-
-  Serial.printf("Serialized length: %d\n", len);
-  for (size_t i = 0; i < len; ++i)
-    Serial.printf("%02X ", buf[i]);
-  Serial.println();
-
-  int state = _radio.transmit(buf, len);
-  if (state == RADIOLIB_ERR_NONE) return 0;
-
-  // TODO: handle different error codes
-  return -1;
+  if (!data || len == 0) return -1;
+  return _radio.transmit(data, len);
 }
 
-int Radio::receive(Packet &pkt)
+int Radio::receive(uint8_t *out, size_t *len)
 {
-  return 0;
+  if (!out || !len || *len == 0) return -1;
+  return _radio.receive(out, *len);
 }
 
-int Radio::receive(Packet &pkt, uint32_t timeoutMs)
+int Radio::receive(uint8_t *out, size_t *len, uint32_t timeoutMs)
 {
-  Frame f;
-  uint8_t buf[sizeof(Frame)];
-
-  int state = _radio.receive(buf, sizeof(Frame), timeoutMs);
-  if (state != RADIOLIB_ERR_NONE) return state; // TODO: custom error code
-
-  size_t len = _radio.getPacketLength();
-  if (len >= sizeof(buf)) len = sizeof(buf) - 1;
-
-  Serial.print("\n[info] Received packet: ");
-  for (size_t i = 0; i < len; ++i)
-    Serial.printf("%02X ", buf[i]);
-  Serial.printf(", length=%d\n", len);
-
-  if (!frame_deserialize(f, buf, len)) return -1;
-
-  // TODO: validate payload len to prevent overflows
-
-  // TODO: handle fragmentation & reassembly
-
-  // TODO: decrypt payload
-
-  // TODO: validate CRC
-
-  pkt.payloadLen = f.payloadLen;
-  memcpy(&pkt.payload, f.payload, f.payloadLen);
-
-  // TODO: check flags to see if an ACK should be sent back
-
-  return 0;
+  if (!out || !len || *len == 0) return -1;
+  return _radio.receive(out, *len, timeoutMs);
 }
